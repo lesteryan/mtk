@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>473</width>
+    <width>550</width>
     <height>341</height>
    </rect>
   </property>
@@ -23,9 +23,9 @@
    <item>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
-      <widget class="QTabWidget" name="tabwidget">
+      <widget class="QTabWidget" name="tab_layer">
        <property name="currentIndex">
-        <number>5</number>
+        <number>0</number>
        </property>
        <widget class="QWidget" name="tab_simple">
         <attribute name="title">
@@ -38,6 +38,43 @@
             <string>116.43903117075563,39.91104010187582,116.43901342113355,39.91150480496536,116.43943805910575,39.911054391124026,116.43942031257961,39.911492021957876</string>
            </property>
           </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_11">
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="label_6">
+             <property name="text">
+              <string>coords type</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="comboBox">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_3">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
          </item>
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_10">
@@ -68,28 +105,14 @@
            <item row="1" column="0">
             <widget class="QPushButton" name="button_draw_wgs84_point">
              <property name="text">
-              <string>draw wgs84 point</string>
+              <string>draw point</string>
              </property>
             </widget>
            </item>
            <item row="1" column="1">
             <widget class="QPushButton" name="button_draw_wgs84_line">
              <property name="text">
-              <string>draw wgs84 line</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="0">
-            <widget class="QPushButton" name="button_draw_gcj02_point">
-             <property name="text">
-              <string>draw gcj02 point</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1">
-            <widget class="QPushButton" name="button_draw_gcj02_line">
-             <property name="text">
-              <string>draw gcj02 line</string>
+              <string>draw line</string>
              </property>
             </widget>
            </item>
@@ -112,7 +135,7 @@
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="0,0,0">
            <property name="spacing">
-            <number>-1</number>
+            <number>6</number>
            </property>
            <property name="sizeConstraint">
             <enum>QLayout::SetFixedSize</enum>
@@ -224,6 +247,43 @@
           </widget>
          </item>
          <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_12">
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="label_7">
+             <property name="text">
+              <string>coords type</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="combo_wkt_coordstype">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_2">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
           <layout class="QHBoxLayout" name="horizontalLayout_2">
            <item>
             <widget class="QLabel" name="label_3">
@@ -244,7 +304,7 @@
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_6">
            <property name="spacing">
-            <number>-1</number>
+            <number>6</number>
            </property>
            <property name="rightMargin">
             <number>0</number>
@@ -361,6 +421,43 @@
           </widget>
          </item>
          <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_13">
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="label_9">
+             <property name="text">
+              <string>coords type</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="combo_geojson_coordstype">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
           <layout class="QHBoxLayout" name="horizontalLayout_8">
            <item>
             <widget class="QLabel" name="label_4">
@@ -393,17 +490,13 @@
        </widget>
        <widget class="QWidget" name="tab_coordtransform">
         <attribute name="title">
-         <string>coordtransform</string>
+         <string>coords transform</string>
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_7">
          <item>
           <layout class="QVBoxLayout" name="verticalLayout_9">
            <item>
-            <widget class="QLabel" name="label_7">
-             <property name="text">
-              <string>wgs84</string>
-             </property>
-            </widget>
+            <widget class="QComboBox" name="combo_coords_1"/>
            </item>
            <item>
             <widget class="QPlainTextEdit" name="text_coords_wgs84"/>
@@ -431,11 +524,7 @@
          <item>
           <layout class="QVBoxLayout" name="verticalLayout_8">
            <item>
-            <widget class="QLabel" name="label_6">
-             <property name="text">
-              <string>gcj02</string>
-             </property>
-            </widget>
+            <widget class="QComboBox" name="combo_coords_2"/>
            </item>
            <item>
             <widget class="QPlainTextEdit" name="text_coords_gcj02"/>
@@ -443,6 +532,34 @@
           </layout>
          </item>
         </layout>
+       </widget>
+       <widget class="QWidget" name="tab">
+        <attribute name="title">
+         <string>xyz layer</string>
+        </attribute>
+        <widget class="QComboBox" name="combo_xyzlayer_layertype">
+         <property name="geometry">
+          <rect>
+           <x>100</x>
+           <y>100</y>
+           <width>75</width>
+           <height>22</height>
+          </rect>
+         </property>
+        </widget>
+        <widget class="QPushButton" name="button_xyzlayer_draw">
+         <property name="geometry">
+          <rect>
+           <x>440</x>
+           <y>100</y>
+           <width>75</width>
+           <height>23</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>draw</string>
+         </property>
+        </widget>
        </widget>
        <widget class="QWidget" name="tab_about">
         <attribute name="title">
@@ -452,7 +569,7 @@
          <item>
           <widget class="QLabel" name="label_5">
            <property name="text">
-            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:36pt;&quot;&gt;MapToolKit&lt;/span&gt;&lt;br/&gt;&lt;br/&gt;&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;span style=&quot; font-size:14pt;&quot;&gt;a plugin to view simple geometry data kit &lt;br/&gt;&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/users/lesteryan&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0068da;&quot;&gt;Source Code and Bug Tracker&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-size:14pt;&quot;&gt;enjoy it! &lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-size:14pt;&quot;&gt;Made in China by &lt;/span&gt;&lt;a href=&quot;cgmsyx@163.com&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0068da;&quot;&gt;lesteryan&lt;/span&gt;&lt;/a&gt;&lt;span style=&quot; font-size:14pt;&quot;&gt;&lt;br/&gt;&lt;br/&gt;&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:36pt;&quot;&gt;MapToolKit&lt;/span&gt;&lt;br/&gt;&lt;br/&gt;&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;span style=&quot; font-size:14pt;&quot;&gt;a plugin to view simple geometry data kit &lt;br/&gt;&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/lesteryan/mtk&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0068da;&quot;&gt;Source Code and Bug Tracker&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-size:14pt;&quot;&gt;enjoy it! &lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-size:14pt;&quot;&gt;Made in China by &lt;/span&gt;&lt;a href=&quot;cgmsyx@163.com&quot;&gt;&lt;span style=&quot; font-size:14pt; text-decoration: underline; color:#0068da;&quot;&gt;lesteryan&lt;/span&gt;&lt;/a&gt;&lt;span style=&quot; font-size:14pt;&quot;&gt;&lt;br/&gt;&lt;br/&gt;&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
            </property>
            <property name="textFormat">
             <enum>Qt::MarkdownText</enum>
