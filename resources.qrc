@@ -1,5 +1,10 @@
 <RCC>
     <qresource prefix="/plugins/mtk" >
         <file>icon.png</file>
+        <file>icons/circle.svg</file>
+        <file>icons/linestring.svg</file>
+        <file>icons/point.svg</file>
+        <file>icons/polygon.svg</file>
+        <file>icons/rectangle.svg</file>
     </qresource>
 </RCC>

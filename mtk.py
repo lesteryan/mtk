@@ -27,15 +27,17 @@ from qgis.PyQt.QtWidgets import *
 from PyQt5.QtWidgets import *
 from qgis.core import *
 from qgis.gui import *
+# from QtCore.Qt import DockWidgetArea
 # Initialize Qt resources from file resources.py
 from .resources import *
 # Import the code for the dialog
-from .mtk_dialog import MapToolKitDialog
+from .mtk_dock_widget import MapToolKitDockWidget
 import os.path
 import time
 import random
 from shapely import wkt, wkb
 import json
+from typing import Tuple, List
 
 from .core.NdsUtil import NdsUtil
 from .core.CoordTrans import CoordTrans
@@ -46,6 +48,8 @@ def handleLayerExtentChanged(layer = None):
 
 class MapToolKit:
     """QGIS Plugin Implementation."""
+
+    supported_coords = ['gcj02', 'wgs84', 'web mecator']
 
     def __init__(self, iface : QgisInterface):
         """Constructor.
@@ -79,7 +83,7 @@ class MapToolKit:
 
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
-        self.first_start = None
+        self.first_start = True
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -97,92 +101,119 @@ class MapToolKit:
         return QCoreApplication.translate('MapToolKit', message)
 
 
-    def add_action(
-        self,
-        icon_path,
-        text,
-        callback,
-        enabled_flag=True,
-        add_to_menu=True,
-        add_to_toolbar=True,
-        status_tip=None,
-        whats_this=None,
-        parent=None):
-        """Add a toolbar icon to the toolbar.
-
-        :param icon_path: Path to the icon for this action. Can be a resource
-            path (e.g. ':/plugins/foo/bar.png') or a normal file system path.
-        :type icon_path: str
-
-        :param text: Text that should be shown in menu items for this action.
-        :type text: str
-
-        :param callback: Function to be called when the action is triggered.
-        :type callback: function
-
-        :param enabled_flag: A flag indicating if the action should be enabled
-            by default. Defaults to True.
-        :type enabled_flag: bool
-
-        :param add_to_menu: Flag indicating whether the action should also
-            be added to the menu. Defaults to True.
-        :type add_to_menu: bool
-
-        :param add_to_toolbar: Flag indicating whether the action should also
-            be added to the toolbar. Defaults to True.
-        :type add_to_toolbar: bool
-
-        :param status_tip: Optional text to show in a popup when mouse pointer
-            hovers over the action.
-        :type status_tip: str
-
-        :param parent: Parent widget for the new action. Defaults None.
-        :type parent: QWidget
-
-        :param whats_this: Optional text to show in the status bar when the
-            mouse pointer hovers over the action.
-
-        :returns: The action that was created. Note that the action is also
-            added to self.actions list.
-        :rtype: QAction
-        """
-
-        icon = QIcon(icon_path)
-        action = QAction(icon, text, parent)
-        action.triggered.connect(callback)
-        action.setEnabled(enabled_flag)
-
-        if status_tip is not None:
-            action.setStatusTip(status_tip)
-
-        if whats_this is not None:
-            action.setWhatsThis(whats_this)
-
-        if add_to_toolbar:
-            # Adds plugin icon to Plugins toolbar
-            self.iface.addToolBarIcon(action)
-
-        if add_to_menu:
-            self.iface.addPluginToMenu(
-                self.menu,
-                action)
-
-        self.actions.append(action)
-
-        return action
+   
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/mtk/icon.png'
-        self.add_action(
-            icon_path,
-            text=self.tr(u''),
-            callback=self.run,
-            parent=self.iface.mainWindow())
+        self.dlg = MapToolKitDockWidget()
+        self.iface.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.dlg)
+
+        if self.first_start == True:
+            self.first_start = False
+            self.widget = self.dlg.widget
+
+            self.widget.combo_simple_coordstype.addItems(self.supported_coords)
+            self.widget.combo_wkt_coordstype.addItems(self.supported_coords)
+            self.widget.combo_geojson_coordstype.addItems(self.supported_coords)
+            self.widget.combo_coords_a.addItems(self.supported_coords)
+            self.widget.combo_coords_b.addItems(self.supported_coords)
+
+            self.widget.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
+            self.widget.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
+            self.widget.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
+
+            self.widget.button_draw_wkt.clicked.connect(self.button_draw_wkt_clicked)
+            self.widget.button_draw_wkb.clicked.connect(self.button_draw_wkb_clicked)
+
+            self.widget.button_draw_geojson.clicked.connect(self.button_draw_geojson_clicked)
+
+            self.widget.button_coordstrans_a2b.clicked.connect(self.button_coordtransform_a2b_clicked)
+            self.widget.button_coordstrans_b2a.clicked.connect(self.button_coordtransform_b2a_clicked)
+
+            self.widget.button_draw_point.clicked.connect(self.button_draw_point_clicked)
+            self.widget.button_draw_line.clicked.connect(self.button_draw_line_clicked)
+
+
+        # self.dlg.show()
+        
+        # icon = QIcon(self.plugin_dir + ':/plugins/mtk/icon.png')
+        # self.toolsAction = QAction(icon, self.tr(u'tools dialog'), self.iface.mainWindow())
+        # self.toolsAction.triggered.connect(self.run)
+        # self.iface.addPluginToMenu(u'tools dialog', self.toolsAction)
+        # self.iface.addToolBarIcon(self.toolsAction)
+        
+        # action_group = QActionGroup(self.iface.mainWindow())
+
+        
+        # action = self.add_action(
+        #     ':/plugins/mtk/icons/point.svg',
+        #     text=self.tr(u'pick point'),
+        #     callback=self.pick_point,
+        #     parent=self.iface.mainWindow())
+        # action_group.addAction(action)
+
+        # self.pick_point_menu = QMenu()
+        # menu_pain_mode = QAction('x1,y1,x2,y2',self.pick_point_menu)
+        # menu_wkt_mode = QAction('wkt', self.pick_point_menu)
+        # menu_geojson_mode = QAction('geojson', self.pick_point_menu)
+        # self.pick_point_menu.addActions([menu_pain_mode, menu_wkt_mode, menu_geojson_mode])
+
+        # self.pick_point_action = QAction(QIcon(':/plugins/mtk/icons/point.svg'), 'pick point', self.iface.mainWindow())
+        # self.pick_point_action.setMenu(self.pick_point_menu)
+        # self.iface.addPluginToMenu('pick point', self.pick_point_action)
+        # # self.a(self.pick_point_action)
+
+        # self.createShapeButton = QToolButton()
+        # self.createShapeButton.setMenu(self.pick_point_menu)
+        # self.createShapeButton.setDefaultAction(self.pick_point_action)
+        # self.createShapeButton.setPopupMode(QToolButton.MenuButtonPopup)
+        # # self.createShapeButton.triggered.connect(self.pick_point)
+        # self.createShapeToolbar = self.toolbar.addWidget(self.createShapeButton)
+        # self.createShapeToolbar.setObjectName('stCreateShape')
+
+        # self.tranformToolbar = self.toolbar.addWidget(self.transformationButton)
+
+        # self.transformationButton = QToolButton()
+        # self.transformationButton.setMenu(self.pick_geometry_menu)
+        # self.transformationButton.setDefaultAction(self.transformationsAction)
+        # self.transformationButton.setPopupMode(QToolButton.MenuButtonPopup)
+
+        
+        # action = self.add_action(
+        #     ':/plugins/mtk/icons/linestring.svg',
+        #     text=self.tr(u'pick line'),
+        #     callback=self.pick_linestring,
+        #     parent=self.iface.mainWindow())
+        # # action.setMenu(self.pick_geometry_menu)
+        # action_group.addAction(action)
+        
+        # action = self.add_action(
+        #     ':/plugins/mtk/icons/rectangle.svg',
+        #     text=self.tr(u'pick rectangle'),
+        #     callback=self.pick_rectangle,
+        #     parent=self.iface.mainWindow())
+        # # action.setMenu(self.pick_geometry_menu)
+        # action_group.addAction(action)
+        
+        # action = self.add_action(
+        #     ':/plugins/mtk/icons/polygon.svg',
+        #     text=self.tr(u'pick polygon'),
+        #     callback=self.pick_polygon,
+        #     parent=self.iface.mainWindow())
+        # # action.setMenu(self.pick_geometry_menu)
+        # action_group.addAction(action)
+        
+        # action = self.add_action(
+        #     ':/plugins/mtk/icons/circle.svg',
+        #     text=self.tr(u'pick circle'),
+        #     callback=self.pick_circle,
+        #     parent=self.iface.mainWindow())
+        # # action.setMenu(self.pick_geometry_menu)
+        # action_group.addAction(action)
 
         # will be set False in run()
-        self.first_start = True
+        # self.first_start = True
 
 
     def unload(self):
@@ -193,6 +224,20 @@ class MapToolKit:
                 action)
             self.iface.removeToolBarIcon(action)
 
+    def pick_point(self):
+        pass
+
+    def pick_linestring(self):
+        pass
+
+    def pick_polygon(self):
+        pass
+
+    def pick_rectangle(self):
+        pass
+
+    def pick_circle(self):
+        pass
 
     def run(self):
         """Run method that performs all the real work"""
@@ -201,31 +246,36 @@ class MapToolKit:
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
         if self.first_start == True:
             self.first_start = False
-            self.dlg = MapToolKitDialog()
-            self.dlg.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
-            self.dlg.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
-            self.dlg.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
+            self.widget = self.dlg.widget
 
-            self.dlg.button_draw_wkt.clicked.connect(self.button_draw_wkt_clicked)
-            self.dlg.button_draw_wkb.clicked.connect(self.button_draw_wkb_clicked)
+            self.widget.combo_simple_coordstype.addItems(self.supported_coords)
+            self.widget.combo_wkt_coordstype.addItems(self.supported_coords)
+            self.widget.combo_geojson_coordstype.addItems(self.supported_coords)
+            self.widget.combo_coords_a.addItems(self.supported_coords)
+            self.widget.combo_coords_b.addItems(self.supported_coords)
 
-            self.dlg.button_draw_geojson.clicked.connect(self.button_draw_geojson_clicked)
+            self.widget.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
+            self.widget.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
+            self.widget.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
 
-            self.dlg.button_coordstrans_gcj02_to_wgs84.clicked.connect(self.button_coordtransform_gcj02towgs84_clicked)
-            self.dlg.button_coordstrans_wgs84_to_gcj02.clicked.connect(self.button_coordtransform_wgs84togcj02_clicked)
+            self.widget.button_draw_wkt.clicked.connect(self.button_draw_wkt_clicked)
+            self.widget.button_draw_wkb.clicked.connect(self.button_draw_wkb_clicked)
 
-            self.dlg.button_draw_wgs84_point.clicked.connect(self.button_draw_wgs84_point_clicked)
-            self.dlg.button_draw_wgs84_line.clicked.connect(self.button_draw_wgs84_line_clicked)
-            self.dlg.button_draw_gcj02_point.clicked.connect(self.button_draw_gcj02_point_clicked)
-            self.dlg.button_draw_gcj02_line.clicked.connect(self.button_draw_gcj02_line_clicked)
+            self.widget.button_draw_geojson.clicked.connect(self.button_draw_geojson_clicked)
+
+            self.widget.button_coordstrans_a2b.clicked.connect(self.button_coordtransform_a2b_clicked)
+            self.widget.button_coordstrans_b2a.clicked.connect(self.button_coordtransform_b2a_clicked)
+
+            self.widget.button_draw_point.clicked.connect(self.button_draw_point_clicked)
+            self.widget.button_draw_line.clicked.connect(self.button_draw_line_clicked)
 
         # show the dialog
-        self.dlg.show()
+        # self.dlg.show()
         # Run the dialog event loop
-        result = self.dlg.exec_()
+        # result = self.dlg.exec_()
         # See if OK was pressed
-        if result:
-            pass
+        # if result:
+        #     pass
             
     def saveFeatures(self, layer : QgsVectorLayer, features : QgsFeature):
         # feature_request = QgsFeatureRequest()
@@ -484,6 +534,7 @@ class MapToolKit:
 
     def button_draw_geojson_clicked(self):
         features = QgsJsonUtils.stringToFeatureList(self.dlg.text_geojson_content.toPlainText())
+        
         layer_name = self.dlg.edit_geojson_layer_name.text()
 
         crs = 'EPSG:4326'
@@ -499,16 +550,76 @@ class MapToolKit:
         layer.updateExtents()
         QgsProject.instance().addMapLayer(layer)
 
+    @staticmethod
+    def coords2wgs84(coords: list[QgsPointXY], coords_system: str) -> list[Tuple[float, float]]:
+        if coords_system == 'wgs84':
+            return coords
+        
+        if coords_system == 'gcj02':
+            return list(map(lambda l : CoordTrans.gcj02_to_wgs84(l.x(), l.y()), coords))
+        
+        if coords_system == 'web mecator':
+            return list(map(lambda l : CoordTrans.webmecator_to_wgs84(l.x(), l.y()), coords))
+        
+    @staticmethod
+    def coords2gcj02(coords: list[QgsPointXY], coords_system: str) -> list[Tuple[float, float]]:
+        if coords_system == 'wgs84':
+            return list(map(lambda l : CoordTrans.wgs84_to_gcj02(l.x(), l.y()), coords))
+        
+        if coords_system == 'gcj02':
+            return coords
+        
+        if coords_system == 'web mecator':
+            return list(map(lambda l : CoordTrans.webmecator_to_gcj02(l.x(), l.y()), coords))
+        
+    @staticmethod
+    def coords2webmecator(coords: list[QgsPointXY], coords_system: str) -> list[Tuple[float, float]]:
+        if coords_system == 'wgs84':
+            return list(map(lambda l : CoordTrans.wgs84_to_webmecator(l.x(), l.y()), coords))
+        
+        if coords_system == 'gcj02':
+            return list(map(lambda l : CoordTrans.gcj02_to_webmecator(l.x(), l.y()), coords))
+        
+        if coords_system == 'web mecator':
+            return coords
+    
+    @staticmethod
+    def coordstransform(coords_src: str, src_coords_system: str, dest_coords_sys: str) -> str:
+        if src_coords_system == dest_coords_sys:
+            return coords_src
+        
+        coords = list(map(lambda x : float(x.strip()), coords_src.strip().split(',')))
+        src_points = []
+        for i in range(0, len(coords), 2):
+            x, y = coords[i + 0], coords[i + 1]
+            src_points.append(QgsPointXY(x, y))
+
+        result : list[Tuple[float, float]] = None
+
+        if dest_coords_sys == 'wgs84':
+            result = MapToolKit.coords2wgs84(src_points, src_coords_system)
+        
+        if dest_coords_sys == 'gcj02':
+            result = MapToolKit.coords2gcj02(src_points, src_coords_system)
+        
+        if dest_coords_sys == 'web mecator':
+            result = MapToolKit.coords2webmecator(src_points, src_coords_system)
+        
+        result = list(map(lambda l : str(l[0]) + ',' + str(l[1]), result))
+
+        return ','.join(result)
+
+
     # mode 0 point 1 line
-    # coord_sys 0 wgs84 1 gcj02
-    def draw(self, layer_name: str, coords_str: str, mode: int, coords_sys: int):
+    # coord_sys wgs84, gcj02, web mecator
+    def draw(self, layer_name: str, coords_str: str, mode: int, coords_sys: str):
         coords = list(map(lambda x : float(x.strip()), coords_str.strip().split(',')))
         points = []
         for i in range(0, len(coords), 2):
             x, y = coords[i + 0], coords[i + 1]
-            if coords_sys == 1:
-                x, y = CoordTrans.gcj02_to_wgs84(x, y)
             points.append(QgsPointXY(x, y))
+
+        MapToolKit.coords_transform(points, coords_sys)
 
         if mode == 0:
             geometry = QgsGeometry.fromMultiPointXY(points)
@@ -518,52 +629,33 @@ class MapToolKit:
         if geometry is not None and not geometry.isEmpty():
             self.draw_geometry(layer_name, geometry)  
 
-    def button_draw_wgs84_point_clicked(self):
+    def button_draw_point_clicked(self):
         layer_name = self.dlg.edit_simple_layer_name.text()
         coords = self.dlg.text_simple_content.toPlainText()
-        self.draw(layer_name, coords, 0, 0)
+        coords_type = self.dlg.combo_simple_coordstype.currentText()
+        self.draw(layer_name, coords, 0, coords_type)
 
-    def button_draw_wgs84_line_clicked(self):
+    def button_draw_line_clicked(self):
         layer_name = self.dlg.edit_simple_layer_name.text()
         coords = self.dlg.text_simple_content.toPlainText()
-        self.draw(layer_name, coords, 1, 0)
-
-    def button_draw_gcj02_point_clicked(self):
-        layer_name = self.dlg.edit_simple_layer_name.text()
-        coords = self.dlg.text_simple_content.toPlainText()
-        self.draw(layer_name, coords, 0, 1)
-
-    def button_draw_gcj02_line_clicked(self):
-        layer_name = self.dlg.edit_simple_layer_name.text()
-        coords = self.dlg.text_simple_content.toPlainText()
-        self.draw(layer_name, coords, 1, 1)
-
-    def button_coordtransform_wgs84togcj02_clicked(self):
-        coords_str = self.dlg.text_coords_wgs84.toPlainText()
-        coords = list(map(lambda x : float(x.strip()), coords_str.strip().split(',')))
-        result = []
-        for i in range(0, len(coords), 2):
-            x, y = coords[i + 0], coords[i + 1]
-            x, y = CoordTrans.wgs84_to_gcj02(x, y)
-            result.append(x)
-            result.append(y)
-        
-        result_str = ','.join(list(map(str, result)))
-        self.dlg.text_coords_gcj02.setPlainText(result_str)
+        coords_type = self.dlg.combo_simple_coordstype.currentText()
+        self.draw(layer_name, coords, 1, coords_type)
 
 
-    def button_coordtransform_gcj02towgs84_clicked(self):
-        coords_str = self.dlg.text_coords_gcj02.toPlainText()
-        coords = list(map(lambda x : float(x.strip()), coords_str.strip().split(',')))
-        result = []
-        for i in range(0, len(coords), 2):
-            x, y = coords[i + 0], coords[i + 1]
-            x, y = CoordTrans.gcj02_to_wgs84(x, y)
-            result.append(x)
-            result.append(y)
+    def button_coordtransform_a2b_clicked(self):
+        src_coords_sys = self.dlg.combo_coords_a.currentText()
+        dest_coords_sys = self.dlg.combo_coords_b.currentText()
+        coords_str = self.dlg.text_coords_a.toPlainText()
+        result_str = MapToolKit.coordstransform(coords_str, src_coords_sys, dest_coords_sys)
+        self.dlg.text_coords_b.setPlainText(result_str)
 
-        result_str = ','.join(list(map(str, result)))
-        self.dlg.text_coords_wgs84.setPlainText(result_str)
+
+    def button_coordtransform_b2a_clicked(self):
+        src_coords_sys = self.dlg.combo_coords_b.currentText()
+        dest_coords_sys = self.dlg.combo_coords_a.currentText()
+        coords_str = self.dlg.text_coords_b.toPlainText()
+        result_str = MapToolKit.coordstransform(coords_str, src_coords_sys, dest_coords_sys)
+        self.dlg.text_coords_a.setPlainText(result_str)
 
 
     def click_test(self):
