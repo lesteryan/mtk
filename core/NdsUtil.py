@@ -5,6 +5,7 @@ import math
 from typing import List, Tuple
 
 from shapely.geometry import Polygon
+from qgis.core import *
 
 class NdsUtil:
     @staticmethod
@@ -138,6 +139,8 @@ class NdsUtil:
         for x in range(mX0, mX1):
             for y in range(mY0, mY1):
                 tile_number = NdsUtil.get_morton_code_from_nds(x, y)
+
+                QgsMessageLog.logMessage("tile_number: " + str(tile_number | levelNumber))  
                 tileidList.append(levelNumber | tile_number)
         
         return tileidList
