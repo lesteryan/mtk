@@ -41,6 +41,7 @@ from typing import Tuple, List
 
 from .core.NdsUtil import NdsUtil
 from .core.CoordTrans import CoordTrans
+from .core.QgsCoordTrans import QgsCoordTrans
 
 def handleLayerExtentChanged(layer = None):
     QgsMessageLog.logMessage('extend changed')
@@ -49,17 +50,19 @@ def handleLayerExtentChanged(layer = None):
 class MapToolKit:
     """QGIS Plugin Implementation."""
 
-    supported_coords = ['wgs84', 'gcj02', 'web mecator']
+    epsg_id_wgs84 = 'EPSG:4326'
+    epsg_id_webmercator = 'EPSG:3857'
+    crs_wgs84 = QgsCoordinateReferenceSystem(epsg_id_wgs84)
+    crs_webmecator = QgsCoordinateReferenceSystem(epsg_id_webmercator)
+    supported_coords = [QgsCoordTrans.COORD.COORD_WGS84, QgsCoordTrans.COORD.COORD_GCJ02, QgsCoordTrans.COORD.COORD_WEBMERCATOR]
+    xyz_layers = {
+        '高德矢量':'http://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        '高德卫星':'https://webst03.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+        'osm':'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        }
     first_start = True
 
     def __init__(self, iface : QgisInterface):
-        """Constructor.
-
-        :param iface: An interface instance that will be passed to this class
-            which provides the hook by which you can manipulate the QGIS
-            application at run time.
-        :type iface: QgsInterface
-        """
         # Save reference to the QGIS interface
         self.iface = iface
         self.canvas = iface.mapCanvas()
@@ -82,28 +85,10 @@ class MapToolKit:
         self.actions = []
         self.menu = self.tr(u'&MapToolKit')
 
-        # Check if plugin was started the first time in current QGIS session
-        # Must be set in initGui() to survive plugin reloads
-        # self.first_start = None
-
-    # noinspection PyMethodMayBeStatic
     def tr(self, message):
-        """Get the translation for a string using Qt translation API.
-
-        We implement this ourselves since we do not inherit QObject.
-
-        :param message: String for translation.
-        :type message: str, QString
-
-        :returns: Translated version of message.
-        :rtype: QString
-        """
-        # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('MapToolKit', message)
 
     def initGui(self):
-        """Create the menu entries and toolbar icons inside the QGIS GUI."""
-
         self.dlg = MapToolKitDockWidget()
         self.iface.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.dlg)
 
@@ -119,6 +104,9 @@ class MapToolKit:
             self.widget.combo_coords_a.setCurrentIndex(0)
             self.widget.combo_coords_b.setCurrentIndex(1)
 
+            self.widget.combo_xyzlayer_layertype.addItems(list(self.xyz_layers.keys()))
+            self.widget.combo_xyzlayer_layertype.currentIndexChanged.connect(self.combo_xyz_index_changed)
+
             self.widget.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
             self.widget.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
             self.widget.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
@@ -133,6 +121,7 @@ class MapToolKit:
 
             self.widget.button_draw_point.clicked.connect(self.button_draw_point_clicked)
             self.widget.button_draw_line.clicked.connect(self.button_draw_line_clicked)
+            self.widget.button_draw_polygon.clicked.connect(self.button_draw_polygon_clicked)
 
 
         # self.dlg.show()
@@ -235,36 +224,37 @@ class MapToolKit:
     def pick_circle(self):
         pass
 
-    def run(self):
-        """Run method that performs all the real work"""
+    # def run(self):
+    #     """Run method that performs all the real work"""
 
-        # Create the dialog with elements (after translation) and keep reference
-        # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-        if self.first_start == True:
-            self.first_start = False
-            self.widget = self.dlg.widget
+    #     # Create the dialog with elements (after translation) and keep reference
+    #     # Only create GUI ONCE in callback, so that it will only load when the plugin is started
+    #     if self.first_start == True:
+    #         self.first_start = False
+    #         self.widget = self.dlg.widget
 
-            self.widget.combo_simple_coordstype.addItems(self.supported_coords)
-            self.widget.combo_wkt_coordstype.addItems(self.supported_coords)
-            self.widget.combo_geojson_coordstype.addItems(self.supported_coords)
-            self.widget.combo_coords_a.addItems(self.supported_coords)
-            self.widget.combo_coords_b.addItems(self.supported_coords)
+    #         self.widget.combo_simple_coordstype.addItems(self.supported_coords)
+    #         self.widget.combo_wkt_coordstype.addItems(self.supported_coords)
+    #         self.widget.combo_geojson_coordstype.addItems(self.supported_coords)
+    #         self.widget.combo_coords_a.addItems(self.supported_coords)
+    #         self.widget.combo_coords_b.addItems(self.supported_coords)
 
-            self.widget.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
-            self.widget.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
-            self.widget.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
+    #         self.widget.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
+    #         self.widget.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
+    #         self.widget.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
 
-            self.widget.button_draw_wkt.clicked.connect(self.button_draw_wkt_clicked)
-            self.widget.button_draw_wkb.clicked.connect(self.button_draw_wkb_clicked)
+    #         self.widget.button_draw_wkt.clicked.connect(self.button_draw_wkt_clicked)
+    #         self.widget.button_draw_wkb.clicked.connect(self.button_draw_wkb_clicked)
 
-            self.widget.button_draw_geojson.clicked.connect(self.button_draw_geojson_clicked)
+    #         self.widget.button_draw_geojson.clicked.connect(self.button_draw_geojson_clicked)
 
-            self.widget.button_coordstrans_a2b.clicked.connect(self.button_coordtransform_a2b_clicked)
-            self.widget.button_coordstrans_b2a.clicked.connect(self.button_coordtransform_b2a_clicked)
+    #         self.widget.button_coordstrans_a2b.clicked.connect(self.button_coordtransform_a2b_clicked)
+    #         self.widget.button_coordstrans_b2a.clicked.connect(self.button_coordtransform_b2a_clicked)
 
-            self.widget.button_draw_point.clicked.connect(self.button_draw_point_clicked)
-            self.widget.button_draw_line.clicked.connect(self.button_draw_line_clicked)
+    #         self.widget.button_draw_point.clicked.connect(self.button_draw_point_clicked)
+    #         self.widget.button_draw_line.clicked.connect(self.button_draw_line_clicked)
 
+    #         self.widget.combo_xyzlayer_layertype.addItems(list(self.xyz_layers.keys()))
         # show the dialog
         # self.dlg.show()
         # Run the dialog event loop
@@ -345,6 +335,9 @@ class MapToolKit:
             if not polygon:
                 QgsMessageLog.logMessage(f'invalid geomtry')
                 return 
+
+
+        
             
             # text_format.setText(str(counter))
             
@@ -425,7 +418,7 @@ class MapToolKit:
         fields.append(QgsField("tile_id", QVariant.Int))
         fields.append(QgsField("level", QVariant.Int))
 
-        nds_layer = QgsVectorLayer('Polygon?crs=epsg:4326', layer_name, 'memory')
+        nds_layer = QgsVectorLayer(f'Polygon?crs={self.epsg_id_wgs84}', layer_name, 'memory')
         symbol = QgsFillSymbol.createSimple({'color': '#00000000', 'style': 'solid', 'outline_color': 'red', 'stroke_width': '1'})
         nds_layer.renderer().setSymbol(symbol)
         
@@ -480,24 +473,23 @@ class MapToolKit:
     def button_get_bound_tile_clicked(self):
         extent = self.iface.mapCanvas().extent()
         crs = self.iface.activeLayer().crs()
-        if(crs.authid() != 'EPSG:4326'):
-            transform = QgsCoordinateTransform(crs, QgsCoordinateReferenceSystem('EPSG:4326'), QgsProject.instance())
+        if(crs.authid() != self.epsg_id_wgs84):
+            transform = QgsCoordinateTransform(crs, QgsCoordinateReferenceSystem(self.epsg_id_wgs84), QgsProject.instance())
             extent = transform.transform(extent)
    
         x1, y1, x2, y2 = extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()
         level = self.widget.spin_tile_level.value()
-        QgsMessageLog.logMessage("xy1: " + f'{x1} {y1} {x2} {y2} {level}')  
         tile_ids = NdsUtil.get_bound_tileids(x1, y1, x2, y2, level)
         tile_ids_str = ','.join(list(map(str, tile_ids)))
         self.widget.text_tile_content.setPlainText(tile_ids_str)
 
-    def draw_geometry(self, layer_name: str, geometry: QgsGeometry):
-        crs = 'EPSG:4326'
-        geom_type = self.wkbType2String(geometry.type())
-        uri = '{}?crs={}'.format(geom_type, crs)
+    def combo_xyz_index_changed(self):
+        xyz_name = self.widget.combo_xyzlayer_layertype.currentText()
+        self.widget.label_xyz_server.setText(self.xyz_layers[xyz_name])
 
-        QgsMessageLog.logMessage("url: " + uri)  
-        QgsMessageLog.logMessage("geom: " + geometry.asWkt())  
+    def draw_geometry(self, layer_name: str, geometry: QgsGeometry):
+        geom_type = self.wkbType2String(geometry.type())
+        uri = f'{geom_type}?crs={self.epsg_id_wgs84}'
 
         layer = QgsVectorLayer(uri, layer_name, 'memory')
         pr = layer.dataProvider()
@@ -521,6 +513,7 @@ class MapToolKit:
         # QgsMessageLog.logMessage("txt: " + uri)  
         geom = QgsGeometry.fromWkt(self.widget.text_wkt_content.toPlainText())
         layer_name = self.widget.edit_wkt_layer_name.text()
+        coord_type = self.widget.combo_wkt_coordstype.text()
         self.draw_geometry(layer_name, geom)
 
     def button_draw_wkb_clicked(self):
@@ -533,9 +526,8 @@ class MapToolKit:
         
         layer_name = self.widget.edit_geojson_layer_name.text()
 
-        crs = 'EPSG:4326'
         geom_type = self.wkbType2String(features[0].geometry().type())
-        uri = '{}?crs={}'.format(geom_type, crs)
+        uri = f'{geom_type}?crs={self.epsg_id_wgs84}'
         layer = QgsVectorLayer(uri, layer_name, 'memory')
         pr = layer.dataProvider()
 
@@ -545,39 +537,6 @@ class MapToolKit:
 
         layer.updateExtents()
         QgsProject.instance().addMapLayer(layer)
-
-    @staticmethod
-    def coords2wgs84(coords: list[QgsPointXY], coords_system: str) -> list[Tuple[float, float]]:
-        if coords_system == 'wgs84':
-            return coords
-        
-        if coords_system == 'gcj02':
-            return list(map(lambda l : CoordTrans.gcj02_to_wgs84(l.x(), l.y()), coords))
-        
-        if coords_system == 'web mecator':
-            return list(map(lambda l : CoordTrans.webmecator_to_wgs84(l.x(), l.y()), coords))
-        
-    @staticmethod
-    def coords2gcj02(coords: list[QgsPointXY], coords_system: str) -> list[Tuple[float, float]]:
-        if coords_system == 'wgs84':
-            return list(map(lambda l : CoordTrans.wgs84_to_gcj02(l.x(), l.y()), coords))
-        
-        if coords_system == 'gcj02':
-            return coords
-        
-        if coords_system == 'web mecator':
-            return list(map(lambda l : CoordTrans.webmecator_to_gcj02(l.x(), l.y()), coords))
-        
-    @staticmethod
-    def coords2webmecator(coords: list[QgsPointXY], coords_system: str) -> list[Tuple[float, float]]:
-        if coords_system == 'wgs84':
-            return list(map(lambda l : CoordTrans.wgs84_to_webmecator(l.x(), l.y()), coords))
-        
-        if coords_system == 'gcj02':
-            return list(map(lambda l : CoordTrans.gcj02_to_webmecator(l.x(), l.y()), coords))
-        
-        if coords_system == 'web mecator':
-            return coords
     
     @staticmethod
     def coords_transform(coords_src: str, src_coords_system: str, dest_coords_sys: str) -> str:
@@ -585,23 +544,12 @@ class MapToolKit:
             return coords_src
         
         coords = list(map(lambda x : float(x.strip()), coords_src.strip().split(',')))
-        src_points = []
+        result = []
         for i in range(0, len(coords), 2):
             x, y = coords[i + 0], coords[i + 1]
-            src_points.append(QgsPointXY(x, y))
-
-        result : list[Tuple[float, float]] = None
-
-        if dest_coords_sys == 'wgs84':
-            result = MapToolKit.coords2wgs84(src_points, src_coords_system)
+            result.append(QgsCoordTrans.point_trans(QgsPoint(x, y), src_coords_system, dest_coords_sys))
         
-        if dest_coords_sys == 'gcj02':
-            result = MapToolKit.coords2gcj02(src_points, src_coords_system)
-        
-        if dest_coords_sys == 'web mecator':
-            result = MapToolKit.coords2webmecator(src_points, src_coords_system)
-        
-        result = list(map(lambda l : str(l[0]) + ',' + str(l[1]), result))
+        result = list(map(lambda l : str(l.x()) + ',' + str(l.y()), result))
 
         return ','.join(result)
 
@@ -609,7 +557,7 @@ class MapToolKit:
     # mode 0 point 1 line
     # coord_sys wgs84, gcj02, web mecator
     def draw(self, layer_name: str, coords_str: str, mode: int, coords_sys: str):
-        coords_str = MapToolKit.coords_transform(coords_str, coords_sys, 'wgs84')
+        coords_str = MapToolKit.coords_transform(coords_str, coords_sys, QgsCoordTrans.COORD.COORD_WGS84)
         coords = list(map(lambda x : float(x.strip()), coords_str.strip().split(',')))
         points = []
         for i in range(0, len(coords), 2):
@@ -620,6 +568,8 @@ class MapToolKit:
             geometry = QgsGeometry.fromMultiPointXY(points)
         elif mode == 1:
             geometry = QgsGeometry.fromPolylineXY(points)
+        elif mode == 2:
+            geometry = QgsGeometry.fromPolygonXY(points)
 
         if geometry is not None and not geometry.isEmpty():
             self.draw_geometry(layer_name, geometry)  
@@ -635,6 +585,12 @@ class MapToolKit:
         coords = self.widget.text_simple_content.toPlainText()
         coords_type = self.widget.combo_simple_coordstype.currentText()
         self.draw(layer_name, coords, 1, coords_type)
+
+    def button_draw_polygon_clicked(self):
+        layer_name = self.widget.edit_simple_layer_name.text()
+        coords = self.widget.text_simple_content.toPlainText()
+        coords_type = self.widget.combo_simple_coordstype.currentText()
+        self.draw(layer_name, coords, 2, coords_type)
 
 
     def button_coordtransform_a2b_clicked(self):

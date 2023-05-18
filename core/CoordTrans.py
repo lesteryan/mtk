@@ -46,27 +46,27 @@ class CoordTrans:
         return (lng * 2 - mglng, lat * 2 - mglat)
     
     @staticmethod
-    def webmecator_to_wgs84(x: float, y: float) -> Tuple[float, float]:
+    def webmercator_to_wgs84(x: float, y: float) -> Tuple[float, float]:
         lon = (x / 20037508.34) * 180
         lat = (y / 20037508.34) * 180
         lat = 180 / math.pi * (2 * math.atan(math.exp(lat * math.pi / 180)) - math.pi / 2)
         return (lon, lat)
 
     @staticmethod
-    def wgs84_to_webmecator(lon: float, lat: float) -> Tuple[float, float]:
+    def wgs84_to_webmercator(lon: float, lat: float) -> Tuple[float, float]:
         x = lon * 20037508.34 / 180
         y = math.log(math.tan((90 + lat) * math.pi / 360)) / (math.pi / 180)
         y = y * 20037508.34 / 180
         return (x, y)
     
     @staticmethod
-    def gcj02_to_webmecator(lng: float, lat: float) -> Tuple[float, float]:
+    def gcj02_to_webmercator(lng: float, lat: float) -> Tuple[float, float]:
         tmp = CoordTrans.gcj02_to_wgs84(lng, lat)
-        return CoordTrans.wgs84_to_webmecator(tmp[0], tmp[1])
+        return CoordTrans.wgs84_to_webmercator(tmp[0], tmp[1])
 
     @staticmethod
-    def webmecator_to_gcj02(lng: float, lat: float) -> Tuple[float, float]:
-        tmp = CoordTrans.webmecator_to_wgs84(lng, lat)
+    def webmercator_to_gcj02(lng: float, lat: float) -> Tuple[float, float]:
+        tmp = CoordTrans.webmercator_to_wgs84(lng, lat)
         return CoordTrans.wgs84_to_gcj02(tmp[0], tmp[1])
 
     @staticmethod
