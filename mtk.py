@@ -36,14 +36,12 @@ import os.path
 import time
 import random
 from shapely import wkt, wkb
+import urllib
 import json
 from typing import Tuple, List
 
 from .core.NdsUtil import NdsUtil
 from .core.QgsCoordTrans import QgsCoordTrans
-
-def handleLayerExtentChanged(layer = None):
-    QgsMessageLog.logMessage('extend changed')
 
 
 class MapToolKit:
@@ -56,20 +54,19 @@ class MapToolKit:
     supported_coords = [QgsCoordTrans.COORD.COORD_WGS84, QgsCoordTrans.COORD.COORD_GCJ02, QgsCoordTrans.COORD.COORD_WEBMERCATOR]
     xyz_layers = {
         '': '',
-        '高德矢量':'http://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        '高德卫星':'https://webst03.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-        'osm':'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'amap vector':'http://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        'amap satelite':'https://webst03.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+        'osm vector':'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         }
     first_start = True
 
     def __init__(self, iface : QgisInterface):
-        # Save reference to the QGIS interface
         self.iface = iface
         self.canvas = iface.mapCanvas()
+      
         self.task_manager = QgsApplication.taskManager()
-        # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
-        # initialize locale
+
         locale = QSettings().value('locale/userLocale')[0:2]
         locale_path = os.path.join(
             self.plugin_dir,
@@ -81,7 +78,6 @@ class MapToolKit:
             self.translator.load(locale_path)
             QCoreApplication.installTranslator(self.translator)
 
-        # Declare instance attributes
         self.actions = []
         self.menu = self.tr(u'&MapToolKit')
 
@@ -89,325 +85,90 @@ class MapToolKit:
         return QCoreApplication.translate('MapToolKit', message)
 
     def initGui(self):
+        QgsMessageLog.logMessage(f'initGui {self.first_start}')
+        self.first_start = False
+
         self.dlg = MapToolKitDockWidget()
         self.iface.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.dlg)
 
-        if self.first_start == True:
-            self.first_start = False
-            self.widget = self.dlg.widget
+        self.widget = self.dlg.widget
+        self.map_tool = None
 
-            self.widget.combo_simple_coordstype.addItems(self.supported_coords)
-            self.widget.combo_wkt_coordstype.addItems(self.supported_coords)
-            self.widget.combo_geojson_coordstype.addItems(self.supported_coords)
-            self.widget.combo_coords_a.addItems(self.supported_coords)
-            self.widget.combo_coords_b.addItems(self.supported_coords)
-            self.widget.combo_coords_a.setCurrentIndex(0)
-            self.widget.combo_coords_b.setCurrentIndex(1)
+        self.widget.combo_simple_coordstype.addItems(self.supported_coords)
+        self.widget.combo_wkt_coordstype.addItems(self.supported_coords)
+        self.widget.combo_geojson_coordstype.addItems(self.supported_coords)
+        self.widget.combo_coords_a.addItems(self.supported_coords)
+        self.widget.combo_coords_b.addItems(self.supported_coords)
+        self.widget.combo_coords_a.setCurrentIndex(0)
+        self.widget.combo_coords_b.setCurrentIndex(1)
 
-            self.widget.combo_xyzlayer_layertype.addItems(list(self.xyz_layers.keys()))
-            self.widget.combo_xyzlayer_layertype.currentIndexChanged.connect(self.combo_xyz_index_changed)
+        self.widget.combo_xyzlayer_layertype.addItems(list(self.xyz_layers.keys()))
+        self.widget.combo_xyzlayer_layertype.currentIndexChanged.connect(self.combo_xyz_index_changed)
+        self.widget.button_xyzlayer_draw.clicked.connect(self.button_xyz_layer_add_clicked)
 
-            self.widget.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
-            self.widget.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
-            self.widget.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
+        self.widget.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
+        self.widget.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
+        self.widget.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
 
-            self.widget.button_draw_wkt.clicked.connect(self.button_draw_wkt_clicked)
-            self.widget.button_draw_wkb.clicked.connect(self.button_draw_wkb_clicked)
+        self.widget.button_draw_coordpick_point.clicked.connect(self.button_coordpick_point_cliked)
+        self.widget.button_draw_coordpick_line.clicked.connect(self.button_coordpick_line_cliked)
+        self.widget.button_draw_coordpick_polygon.clicked.connect(self.button_coordpick_polygon_cliked)
 
-            self.widget.button_draw_geojson.clicked.connect(self.button_draw_geojson_clicked)
+        self.widget.button_draw_wkt.clicked.connect(self.button_draw_wkt_clicked)
+        self.widget.button_draw_wkb.clicked.connect(self.button_draw_wkb_clicked)
 
-            self.widget.button_coordstrans_a2b.clicked.connect(self.button_coordtransform_a2b_clicked)
-            self.widget.button_coordstrans_b2a.clicked.connect(self.button_coordtransform_b2a_clicked)
+        self.widget.button_draw_geojson.clicked.connect(self.button_draw_geojson_clicked)
 
-            self.widget.button_draw_point.clicked.connect(self.button_draw_point_clicked)
-            self.widget.button_draw_line.clicked.connect(self.button_draw_line_clicked)
-            self.widget.button_draw_polygon.clicked.connect(self.button_draw_polygon_clicked)
+        self.widget.button_coordstrans_a2b.clicked.connect(self.button_coordtransform_a2b_clicked)
+        self.widget.button_coordstrans_b2a.clicked.connect(self.button_coordtransform_b2a_clicked)
 
+        self.widget.button_draw_point.clicked.connect(self.button_draw_point_clicked)
+        self.widget.button_draw_line.clicked.connect(self.button_draw_line_clicked)
+        self.widget.button_draw_polygon.clicked.connect(self.button_draw_polygon_clicked)
 
-        # self.dlg.show()
-        
-        # icon = QIcon(self.plugin_dir + ':/plugins/mtk/icon.png')
-        # self.toolsAction = QAction(icon, self.tr(u'tools dialog'), self.iface.mainWindow())
-        # self.toolsAction.triggered.connect(self.run)
-        # self.iface.addPluginToMenu(u'tools dialog', self.toolsAction)
-        # self.iface.addToolBarIcon(self.toolsAction)
-        
-        # action_group = QActionGroup(self.iface.mainWindow())
+        self.canvas.extentsChanged.connect(self.handleLayerExtentChanged)
 
-        
-        # action = self.add_action(
-        #     ':/plugins/mtk/icons/point.svg',
-        #     text=self.tr(u'pick point'),
-        #     callback=self.pick_point,
-        #     parent=self.iface.mainWindow())
-        # action_group.addAction(action)
-
-        # self.pick_point_menu = QMenu()
-        # menu_pain_mode = QAction('x1,y1,x2,y2',self.pick_point_menu)
-        # menu_wkt_mode = QAction('wkt', self.pick_point_menu)
-        # menu_geojson_mode = QAction('geojson', self.pick_point_menu)
-        # self.pick_point_menu.addActions([menu_pain_mode, menu_wkt_mode, menu_geojson_mode])
-
-        # self.pick_point_action = QAction(QIcon(':/plugins/mtk/icons/point.svg'), 'pick point', self.iface.mainWindow())
-        # self.pick_point_action.setMenu(self.pick_point_menu)
-        # self.iface.addPluginToMenu('pick point', self.pick_point_action)
-        # # self.a(self.pick_point_action)
-
-        # self.createShapeButton = QToolButton()
-        # self.createShapeButton.setMenu(self.pick_point_menu)
-        # self.createShapeButton.setDefaultAction(self.pick_point_action)
-        # self.createShapeButton.setPopupMode(QToolButton.MenuButtonPopup)
-        # # self.createShapeButton.triggered.connect(self.pick_point)
-        # self.createShapeToolbar = self.toolbar.addWidget(self.createShapeButton)
-        # self.createShapeToolbar.setObjectName('stCreateShape')
-
-        # self.tranformToolbar = self.toolbar.addWidget(self.transformationButton)
-
-        # self.transformationButton = QToolButton()
-        # self.transformationButton.setMenu(self.pick_geometry_menu)
-        # self.transformationButton.setDefaultAction(self.transformationsAction)
-        # self.transformationButton.setPopupMode(QToolButton.MenuButtonPopup)
-
-        
-        # action = self.add_action(
-        #     ':/plugins/mtk/icons/linestring.svg',
-        #     text=self.tr(u'pick line'),
-        #     callback=self.pick_linestring,
-        #     parent=self.iface.mainWindow())
-        # # action.setMenu(self.pick_geometry_menu)
-        # action_group.addAction(action)
-        
-        # action = self.add_action(
-        #     ':/plugins/mtk/icons/rectangle.svg',
-        #     text=self.tr(u'pick rectangle'),
-        #     callback=self.pick_rectangle,
-        #     parent=self.iface.mainWindow())
-        # # action.setMenu(self.pick_geometry_menu)
-        # action_group.addAction(action)
-        
-        # action = self.add_action(
-        #     ':/plugins/mtk/icons/polygon.svg',
-        #     text=self.tr(u'pick polygon'),
-        #     callback=self.pick_polygon,
-        #     parent=self.iface.mainWindow())
-        # # action.setMenu(self.pick_geometry_menu)
-        # action_group.addAction(action)
-        
-        # action = self.add_action(
-        #     ':/plugins/mtk/icons/circle.svg',
-        #     text=self.tr(u'pick circle'),
-        #     callback=self.pick_circle,
-        #     parent=self.iface.mainWindow())
-        # # action.setMenu(self.pick_geometry_menu)
-        # action_group.addAction(action)
-
-        # will be set False in run()
-        # self.first_start = True
-
+        # self.widget.pushButton_test.clicked.connect(self.click_test)
 
     def unload(self):
-        QgsMessageLog.logMessage('close')
-        self.dlg.close()
+        self.iface.removeDockWidget(self.dlg)
+        if self.map_tool is not None:
+            self.canvas.unsetMapTool(self.map_tool)
 
-    def pick_point(self):
-        pass
+    def button_coordpick_point_cliked(self):
+        if self.map_tool is not None:
+            self.map_tool.draw_finish_event.disconnect(self.coodinate_pick_finished)
 
-    def pick_linestring(self):
-        pass
+        self.map_tool = DrawTool(self.canvas, QgsWkbTypes.PointGeometry)
+        self.map_tool.draw_finish_event.connect(self.coodinate_pick_finished)
+        self.canvas.setMapTool(self.map_tool)
 
-    def pick_polygon(self):
-        pass
+    def button_coordpick_line_cliked(self):
+        if self.map_tool is not None:
+            self.map_tool.draw_finish_event.disconnect(self.coodinate_pick_finished)
 
-    def pick_rectangle(self):
-        pass
+        self.map_tool = DrawTool(self.canvas, QgsWkbTypes.LineGeometry)
+        self.map_tool.draw_finish_event.connect(self.coodinate_pick_finished)
+        self.canvas.setMapTool(self.map_tool)
 
-    def pick_circle(self):
-        pass
+    def button_coordpick_polygon_cliked(self):
+        if self.map_tool is not None:
+            self.map_tool.draw_finish_event.disconnect(self.coodinate_pick_finished)
 
-    # def run(self):
-    #     """Run method that performs all the real work"""
+        self.map_tool = DrawTool(self.canvas, QgsWkbTypes.PolygonGeometry)
+        self.map_tool.draw_finish_event.connect(self.coodinate_pick_finished)
+        self.canvas.setMapTool(self.map_tool)
 
-    #     # Create the dialog with elements (after translation) and keep reference
-    #     # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-    #     if self.first_start == True:
-    #         self.first_start = False
-    #         self.widget = self.dlg.widget
-
-    #         self.widget.combo_simple_coordstype.addItems(self.supported_coords)
-    #         self.widget.combo_wkt_coordstype.addItems(self.supported_coords)
-    #         self.widget.combo_geojson_coordstype.addItems(self.supported_coords)
-    #         self.widget.combo_coords_a.addItems(self.supported_coords)
-    #         self.widget.combo_coords_b.addItems(self.supported_coords)
-
-    #         self.widget.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
-    #         self.widget.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
-    #         self.widget.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
-
-    #         self.widget.button_draw_wkt.clicked.connect(self.button_draw_wkt_clicked)
-    #         self.widget.button_draw_wkb.clicked.connect(self.button_draw_wkb_clicked)
-
-    #         self.widget.button_draw_geojson.clicked.connect(self.button_draw_geojson_clicked)
-
-    #         self.widget.button_coordstrans_a2b.clicked.connect(self.button_coordtransform_a2b_clicked)
-    #         self.widget.button_coordstrans_b2a.clicked.connect(self.button_coordtransform_b2a_clicked)
-
-    #         self.widget.button_draw_point.clicked.connect(self.button_draw_point_clicked)
-    #         self.widget.button_draw_line.clicked.connect(self.button_draw_line_clicked)
-
-    #         self.widget.combo_xyzlayer_layertype.addItems(list(self.xyz_layers.keys()))
-        # show the dialog
-        # self.dlg.show()
-        # Run the dialog event loop
-        # result = self.dlg.exec_()
-        # See if OK was pressed
-        # if result:
-        #     pass
+    def coodinate_pick_finished(self, geometry: QgsGeometry):
+        QgsMessageLog.logMessage(f'coodinate_pick_finished {geometry.asWkt()}')
             
-    def saveFeatures(self, layer : QgsVectorLayer, features : QgsFeature):
-        # feature_request = QgsFeatureRequest()
-        # feature_itr : QgsFeatureIterator =  layer.getFeatures(feature_request)
-        # ids = [i.id() for i in feature_itr]
-        # QgsMessageLog.logMessage('ids = ' + ','.join(','))
-        # if len(ids) != 0:
-        #     # layer.startEditing()
-        #     # layer.dataProvider().deleteFeatures([1])
-        #     # layer.commitChanges()
-        #     QgsMessageLog.logMessage(f'feature delete success')
-        # else:
-        #     QgsMessageLog.logMessage(f'empty, skip delete')
-        
-        layer.dataProvider().addFeatures([features])
-        layer.updateExtents()
-        layer.reload()
-        self.canvas.refresh()
 
-    def completed(self, exception = None, result=None):
-        QgsMessageLog.logMessage('Task was finished')
+    def handleLayerExtentChanged(self, layer = None):
+        if self.canvas.scale() > 194089792:
+            reply =  QMessageBox.question(self.dlg, 'tips', 'canvas scale too large, go to default zoom ?', QMessageBox.Yes | QMessageBox.No)
 
-    def mytask(self, task = None, arg1 = None):
-        QgsMessageLog.logMessage(f'task run ... {arg1}')
-        fields = QgsFields()
-        fields.append(QgsField("name", QVariant.String))
-
-        polygon_layer = QgsVectorLayer('Polygon?crs=epsg:4326', 'Polygon', 'memory')
-        polygon_layer.dataProvider().addAttributes(fields)
-        polygon_layer.updateFields()
-
-        linestring_layer = QgsVectorLayer('LineString?crs=epsg:4326', 'Line', 'memory')
-        linestring_layer.dataProvider().addAttributes(fields)
-        linestring_layer.updateFields()
-
-        polygon_layer.setAutoRefreshInterval(5)
-        polygon_layer.setAutoRefreshEnabled(True)
-        linestring_layer.setAutoRefreshInterval(5)
-        linestring_layer.setAutoRefreshEnabled(True)
-
-        QgsProject.instance().addMapLayer(polygon_layer)
-        QgsProject.instance().addMapLayer(linestring_layer)
-
-        layer_settings = QgsPalLayerSettings()
-        text_format = QgsTextFormat()
-        text_format.setFont(QFont("宋体", 20))
-        text_format.setColor(QColor("black"))
-        layer_settings.setFormat(text_format)
-        layer_settings.fieldName = "name"
-        layer_settings.placement = QgsPalLayerSettings.Line
-        layer_settings.enabled = True
-        labels = QgsVectorLayerSimpleLabeling(layer_settings)
-
-        # symbol = QgsSymbol.defaultSymbol(layer.geometryType())
-        # symbol.setColor(QColor('red'))
-
-        polygon_layer.setLabeling(labels)
-        polygon_layer.setLabelsEnabled(True)
-
-
-        linestring_layer.setLabeling(labels)
-        linestring_layer.setLabelsEnabled(True)
-        
-        counter = 0
-        step = 0.01
-
-        base_x, base_y = 116.398231, 39.906627
-
-        while True:
-            polygon = QgsGeometry.fromWkt(f'POLYGON(({base_x + counter} {base_y + counter} ,{base_x + counter}  {base_y + counter + 1 * step},{base_x + counter + 1 * step} {base_y + counter + 1 * step},{base_x + counter + 1 * step} {base_y + counter},{base_x + counter} {base_y + counter}))')
-            if not polygon:
-                QgsMessageLog.logMessage(f'invalid geomtry')
-                return 
-
-
-        
-            
-            # text_format.setText(str(counter))
-            
-            polygon_feature = QgsFeature()
-            polygon_feature.setFields(fields)
-            polygon_feature.setId(counter)
-            polygon_feature.setGeometry(polygon)
-            polygon_feature.setAttribute('name', str(int(counter * 100)))
-            # polygon_feature.setSymbol(symbol)
-
-            polygon_layer.dataProvider().addFeature(polygon_feature)
-            polygon_layer.updateExtents()
-
-            linestring = QgsGeometry.fromWkt(f'LINESTRING({base_x + counter} {base_y + counter},{base_x + counter} {base_y + counter + 2 * step},{base_x + counter + 2 * step} {base_y + counter},{base_x + counter} {base_y + counter})')
-            if not linestring:
-                QgsMessageLog.logMessage(f'invalid geomtry')
-                return 
-            
-            linestring_feature = QgsFeature()
-            linestring_feature.setFields(fields)
-            linestring_feature.setId(counter)
-            linestring_feature.setGeometry(linestring)
-            linestring_feature.setAttribute('name', str(int(counter * 100)))
-
-            linestring_layer.dataProvider().addFeature(linestring_feature)
-            linestring_layer.updateExtents()
-
-            # self.iface.mapCanvas().setExtent(linestring_layer.extent())
-
-            time.sleep(0.5)
-            counter = counter + step
-
-            if counter > step * 20:
-                break
-
-        QgsMessageLog.logMessage("debug2 ...")
-        # 获取当前视口的中心点坐标和缩放等级
-        canvas = self.iface.mapCanvas()
-        center = canvas.center()
-        scale = canvas.scale()
-        QgsMessageLog.logMessage("debug3 ...")
-        # 获取当前选中的图层
-        layer = self.iface.activeLayer()
-
-        # 获取图层的坐标参考系
-        crs = layer.crs()
-
-        QgsMessageLog.logMessage("CRS: " + crs.authid())
-        QgsMessageLog.logMessage("CRS2: " + canvas.mapSettings().destinationCrs().authid())
-        
-        QgsMessageLog.logMessage(f'Center: {center.x()},{center.y()}')
-
-        # 获取图层的范围（extent）
-        extent = layer.extent()
-        # 将extent转换为当前项目的坐标参考系
-        transform = QgsCoordinateTransform(layer.crs(), canvas.mapSettings().destinationCrs())
-        projected_extent = transform.transform(extent)
-        # 输出结果
-        
-        QgsMessageLog.logMessage(f'Scale: {scale}')
-        
-        QgsMessageLog.logMessage(f'Extent: {extent.toString()}')
-        QgsMessageLog.logMessage(f'Extent: {projected_extent.toString()}')
-        return True
-
-    def stopped(self, task):
-        QgsMessageLog.logMessage('Task was canceled')
-
-    def draw_features(self, layer_name: str, features: list[QgsFeature]):
-        pass
+            if reply == QMessageBox.Yes:
+                self.canvas.setExtent(QgsRectangle(12962995.7347147744148970,4853260.9332224922254682,12963803.4525721203535795,4853649.7979973917827010))
 
     def draw_nds_tile(self, layer_name: str, tileid_str: str, coords_sys: str):
         if(len(tileid_str) == 0):
@@ -456,7 +217,8 @@ class MapToolKit:
             # polygon_feature.setSymbol(symbol)
 
             nds_layer.dataProvider().addFeature(feature)
-            nds_layer.updateExtents()
+        
+        nds_layer.updateExtents()
 
     def button_draw_nds_wgs84_clicked(self):
         QgsMessageLog.logMessage(self.widget.text_tile_content.toPlainText())
@@ -497,7 +259,7 @@ class MapToolKit:
         layer.updateExtents()
         QgsProject.instance().addMapLayer(layer)
 
-    def wkbType2String(self, g: QgsGeometry):
+    def wkbType2String(self, g: QgsGeometry) -> str:
         geometry = g.get()
         if isinstance(geometry, QgsPoint) or isinstance(geometry, QgsPointXY) or isinstance(geometry, QgsMultiPoint):
             return 'Point'
@@ -519,7 +281,6 @@ class MapToolKit:
         geom = QgsCoordTrans.geometry_trans(geom, coord_type, QgsCoordTrans.COORD.COORD_WGS84)
         layer_name = self.widget.edit_wkt_layer_name.text()
         self.draw_geometry(layer_name, geom)
-
 
     def button_draw_wkb_clicked(self):
         geom = QgsGeometry.fromWkb(bytearray.fromhex(self.widget.text_wkt_content.toPlainText()))
@@ -600,14 +361,76 @@ class MapToolKit:
         result_str = QgsCoordTrans.coords_transform(coords_str, src_coords_sys, dest_coords_sys)
         self.widget.text_coords_a.setPlainText(result_str)
 
+    def button_xyz_layer_add_clicked(self):
+        layer_name = self.widget.combo_xyzlayer_layertype.currentText()
+        layer_uri = self.widget.label_xyz_server.text()
+
+        if layer_name is None or layer_uri is None :
+            return 
+        
+        layer_uri = urllib.parse.quote(layer_uri)
+        layer_uri = f'url={layer_uri}&type=xyz&zmax=18&zmin=0'
+        QgsMessageLog.logMessage(layer_uri)
+        layer = QgsRasterLayer(layer_uri, layer_name, "wms")
+
+        QgsProject.instance().addMapLayer(layer)  
 
     def click_test(self):
 
-        try:
-            QgsMessageLog.logMessage('click')
-            task1 : QgsTask = QgsTask.fromFunction('Waste cpu 1', self.mytask, on_finished=self.completed, arg1=3)
-            self.task_manager.addTask(task1)
+        QgsMessageLog.logMessage(f'aoh.... {type(self.canvas.mapTool())}')
 
-            self.iface.mapCanvas().extentsChanged.connect(handleLayerExtentChanged)
-        except Exception:
-            QgsMessageLog.logMessage('aoh....')
+
+        # try:
+        #     # QgsMessageLog.logMessage('click')
+        #     # task1 : QgsTask = QgsTask.fromFunction('Waste cpu 1', self.mytask, on_finished=self.completed, arg1=3)
+        #     # self.task_manager.addTask(task1)
+
+        #     pass
+        # except Exception:
+        #     QgsMessageLog.logMessage('aoh....')
+
+class DrawTool(QgsMapTool):
+    draw_finish_event = pyqtSignal(QgsGeometry)
+
+    def __init__(self, canvas: QgsMapCanvas, geometry_type: QgsWkbTypes):
+        super().__init__(canvas)
+        self.canvas = canvas
+        self.geometry_type = geometry_type
+        self.geometry_index = 0
+        self.point_count = 0
+        self.rubber_band = QgsRubberBand(self.canvas, self.geometry_type)
+        self.rubber_band.setColor(QColor(0x112233))
+
+
+    def reset(self):
+        self.rubber_band.reset(self.geometry_type)
+
+    def canvasPressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self.point_count = self.point_count + 1
+            point = self.toMapCoordinates(event.pos())
+            self.rubber_band.addPoint(point, geometryIndex=self.geometry_index)
+        elif event.button() == QtCore.Qt.RightButton:
+            if self.point_count == 0:
+                self.deactivate()
+            else:
+                self.geometry_index = self.geometry_index + 1
+                self.point_count = 0
+            # QgsMessageLog.logMessage(f'right {self.rubber_band.numberOfVertices()}')
+            # self.rubber_band.closePoints(True, self.rubber_band.numberOfVertices())
+
+    # def canvasReleaseEvent(self, event):
+    #     QgsMessageLog.logMessage('canvasReleaseEvent')
+    #     if event.button() == QtCore.Qt.RightButton:
+    #         geom = self.rubber_band.asGeometry()
+    #         self.draw_finish_event.emit(geom)
+
+    #         self.reset()
+
+    def deactivate(self):
+        geom = self.rubber_band.asGeometry()
+        self.draw_finish_event.emit(geom)
+
+        self.reset()
+        super().deactivate()
+        
