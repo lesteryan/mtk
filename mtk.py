@@ -49,8 +49,6 @@ class MapToolKit:
 
     epsg_id_wgs84 = 'EPSG:4326'
     epsg_id_webmercator = 'EPSG:3857'
-    crs_wgs84 = QgsCoordinateReferenceSystem(epsg_id_wgs84)
-    crs_webmecator = QgsCoordinateReferenceSystem(epsg_id_webmercator)
     supported_coords = [QgsCoordTrans.COORD.COORD_WGS84, QgsCoordTrans.COORD.COORD_GCJ02, QgsCoordTrans.COORD.COORD_WEBMERCATOR]
     xyz_layers = {
         '': '',
@@ -58,7 +56,6 @@ class MapToolKit:
         'amap satelite':'https://webst03.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
         'osm vector':'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         }
-    first_start = True
 
     def __init__(self, iface : QgisInterface):
         self.iface = iface
@@ -85,9 +82,6 @@ class MapToolKit:
         return QCoreApplication.translate('MapToolKit', message)
 
     def initGui(self):
-        QgsMessageLog.logMessage(f'initGui {self.first_start}')
-        self.first_start = False
-
         self.dlg = MapToolKitDockWidget()
         self.iface.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.dlg)
 
@@ -128,8 +122,6 @@ class MapToolKit:
 
         self.canvas.extentsChanged.connect(self.handleLayerExtentChanged)
 
-        # self.widget.pushButton_test.clicked.connect(self.click_test)
-
     def unload(self):
         self.iface.removeDockWidget(self.dlg)
         if self.map_tool is not None:
@@ -160,33 +152,91 @@ class MapToolKit:
         self.canvas.setMapTool(self.map_tool)
 
     def coodinate_pick_finished(self, geometry: QgsGeometry):
-        QgsMessageLog.logMessage(f'coodinate_pick_finished {geometry.asWkt()}')
+        if not geometry.isEmpty():
+            # geometry = QgsCoordTrans.geometry_trans(geometry, QgsCoordTrans.COORD.COORD_WEBMERCATOR, QgsCoordTrans.COORD.COORD_WGS84)
+
+            points = QgsCoordTrans.get_geometry_points(geometry)
+            points_str = ','.join(list(map(lambda l : f'{l.x()},{l.y()}', points)))
+            self.widget.text_simple_content.setPlainText(points_str)
+            self.widget.tab_layer.setCurrentIndex(2)
+            self.widget.text_wkt_content.setPlainText(geometry.asWkt())
+            self.widget.text_geojson_content.setPlainText(json.dumps(json.loads(geometry.asJson()), indent=4))
             
 
     def handleLayerExtentChanged(self, layer = None):
         if self.canvas.scale() > 194089792:
-            reply =  QMessageBox.question(self.dlg, 'tips', 'canvas scale too large, go to default zoom ?', QMessageBox.Yes | QMessageBox.No)
+            reply =  QMessageBox.question(self.dlg, 'tips', 'canvas scale too large, go to default zoom ?', QMessageBox.Yes | QMessageBox.No | QMessageBox.NoToAll, QMessageBox.Yes)
 
             if reply == QMessageBox.Yes:
-                self.canvas.setExtent(QgsRectangle(12962995.7347147744148970,4853260.9332224922254682,12963803.4525721203535795,4853649.7979973917827010))
+                self.canvas.setExtent(QgsRectangle(12962995,4853260,12963803,4853649))
 
-    def draw_nds_tile(self, layer_name: str, tileid_str: str, coords_sys: str):
+        if self.widget.checkbox_tile_draw_with_zoom.isChecked() and self.canvas.scale() < 200000:
+            nds_layers = QgsProject.instance().mapLayersByShortName('nds')
+            if len(nds_layers) != 0:
+                nds_layer = nds_layers[0]
+                
+                request = QgsFeatureRequest().setFilterRect(self.canvas.extent())
+                features = nds_layer.getFeatures(request)
+                exist_tile_ids = set(map(lambda l : int(l.attributeMap()['tile_id']), features))
+
+                extent = self.iface.mapCanvas().extent()
+                crs = nds_layer.crs()
+                if(crs.authid() != self.epsg_id_wgs84):
+                    transform = QgsCoordinateTransform(crs, QgsCoordinateReferenceSystem(self.epsg_id_wgs84), QgsProject.instance())
+                    extent = transform.transform(extent)
+        
+                x1, y1, x2, y2 = extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()
+                level = self.widget.spin_tile_level.value()
+                tile_ids = NdsUtil.get_bound_tileids(x1, y1, x2, y2, level)
+
+                tile_ids = list(filter(lambda l : l not in exist_tile_ids, tile_ids))
+
+                if len(tile_ids) != 0:
+                    tile_ids_str = ','.join(list(map(str, tile_ids)))
+                    self.draw_nds_tile_by_layer(nds_layer, tile_ids_str, QgsCoordTrans.COORD.COORD_WGS84)
+        
+    def draw_nds_tile_by_layer(self, nds_layer: QgsVectorLayer, tileid_str: str, coords_sys: str): 
         if(len(tileid_str) == 0):
             self.iface.messageBar().pushMessage("Error", "invalid nds string", level=Qgis.Critical)
             return 
 
         fields = QgsFields()
-        fields.append(QgsField("tile_id", QVariant.Int))
+        fields.append(QgsField("tile_id", QVariant.LongLong))
         fields.append(QgsField("level", QVariant.Int))
 
+        pr = nds_layer.dataProvider()
+
+        tiles = list(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
+        for tileid in tiles:
+            level = NdsUtil.get_tile_level(tileid)
+            p = NdsUtil.get_tile_polygon_of_deg(tileid)
+            points = list(map(lambda l : QgsPointXY(l[0], l[1]), p))
+            polygon = QgsGeometry.fromPolygonXY([points])
+            polygon = QgsCoordTrans.geometry_trans(polygon, coords_sys, QgsCoordTrans.COORD.COORD_WGS84)
+
+            feature = QgsFeature(fields, tileid)
+            feature.setGeometry(polygon)
+            feature['tile_id'] = tileid
+            feature['level'] = level
+            # feature.setAttribute('level', level)
+            # polygon_feature.setSymbol(symbol)
+
+            pr.addFeature(feature)
+        
+        nds_layer.updateExtents()
+
+    def draw_nds_tile_by_name(self, layer_name: str, tileid_str: str, coords_sys: str):
         nds_layer = QgsVectorLayer(f'Polygon?crs={self.epsg_id_wgs84}', layer_name, 'memory')
+        nds_layer.setShortName('nds')
         symbol = QgsFillSymbol.createSimple({'color': '#00000000', 'style': 'solid', 'outline_color': 'red', 'stroke_width': '1'})
         nds_layer.renderer().setSymbol(symbol)
+
+        fields = QgsFields()
+        fields.append(QgsField("tile_id", QVariant.UInt))
+        fields.append(QgsField("level", QVariant.Int))
         
         nds_layer.dataProvider().addAttributes(fields)
         nds_layer.updateFields()
-
-        QgsProject.instance().addMapLayer(nds_layer)
 
         layer_settings = QgsPalLayerSettings()
         text_format = QgsTextFormat()
@@ -200,32 +250,15 @@ class MapToolKit:
         nds_layer.setLabeling(labels)
         nds_layer.setLabelsEnabled(True)
 
-        tiles = list(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
-        for tileid in tiles:
-            level = NdsUtil.get_tile_level(tileid)
-            p = NdsUtil.get_tile_polygon_of_deg(tileid)
-            points = list(map(lambda l : QgsPointXY(l[0], l[1]), p))
-            polygon = QgsGeometry.fromPolygonXY([points])
-            polygon = QgsCoordTrans.geometry_trans(polygon, coords_sys, QgsCoordTrans.COORD.COORD_WGS84)
+        QgsProject.instance().addMapLayer(nds_layer)
 
-            feature = QgsFeature()
-            feature.setFields(fields)
-            feature.setId(tileid)
-            feature.setGeometry(polygon)
-            feature.setAttribute('tile_id', tileid)
-            feature.setAttribute('level', level)
-            # polygon_feature.setSymbol(symbol)
-
-            nds_layer.dataProvider().addFeature(feature)
-        
-        nds_layer.updateExtents()
+        self.draw_nds_tile_by_layer(nds_layer, tileid_str, coords_sys)
 
     def button_draw_nds_wgs84_clicked(self):
-        QgsMessageLog.logMessage(self.widget.text_tile_content.toPlainText())
-        self.draw_nds_tile(self.widget.edit_tile_layer_name.text(), self.widget.text_tile_content.toPlainText(), QgsCoordTrans.COORD.COORD_WGS84)
+        self.draw_nds_tile_by_name(self.widget.edit_tile_layer_name.text(), self.widget.text_tile_content.toPlainText(), QgsCoordTrans.COORD.COORD_WGS84)
 
     def button_draw_nds_gcj02_clicked(self):
-        self.draw_nds_tile(self.widget.edit_tile_layer_name.text(), self.widget.text_tile_content.toPlainText(), QgsCoordTrans.COORD.COORD_GCJ02)
+        self.draw_nds_tile_by_name(self.widget.edit_tile_layer_name.text(), self.widget.text_tile_content.toPlainText(), QgsCoordTrans.COORD.COORD_GCJ02)
 
     def button_get_bound_tile_clicked(self):
         extent = self.iface.mapCanvas().extent()
@@ -251,6 +284,7 @@ class MapToolKit:
         QgsMessageLog.logMessage(f'{uri}')
 
         layer = QgsVectorLayer(uri, layer_name, 'memory')
+        layer.setShortName('simple')
         pr = layer.dataProvider()
 
         feature = QgsFeature()
@@ -260,7 +294,7 @@ class MapToolKit:
         QgsProject.instance().addMapLayer(layer)
 
     def wkbType2String(self, g: QgsGeometry) -> str:
-        geometry = g.get()
+        geometry = g.constGet()
         if isinstance(geometry, QgsPoint) or isinstance(geometry, QgsPointXY) or isinstance(geometry, QgsMultiPoint):
             return 'Point'
         elif isinstance(geometry, QgsLineString) or isinstance(geometry, QgsMultiLineString):
@@ -271,7 +305,11 @@ class MapToolKit:
         raise Exception(f'invalid geometry type {type(geometry)}')
 
     def button_draw_wkt_clicked(self):
-        geom = QgsGeometry.fromWkt(self.widget.text_wkt_content.toPlainText())
+        text_content = self.widget.text_wkt_content.toPlainText()
+        geometries = list(map(lambda l : QgsGeometry.fromWkt(l.strip()), text_content.strip().split('\n')))
+        geom = QgsGeometryCollection()
+        for g in geometries:
+            geom.addGeometry(g)
 
         if geom is None or geom.isEmpty():
             self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Critical)
@@ -299,6 +337,7 @@ class MapToolKit:
         geom_type = self.wkbType2String(features[0].geometry())
         uri = f'{geom_type}?crs={self.epsg_id_wgs84}'
         layer = QgsVectorLayer(uri, layer_name, 'memory')
+        layer.setShortName('geojson')
         pr = layer.dataProvider()
 
         # 添加字段和特征到 Layer 中

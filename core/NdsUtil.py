@@ -140,7 +140,7 @@ class NdsUtil:
             for y in range(mY0, mY1):
                 tile_number = NdsUtil.get_morton_code_from_nds(x, y)
 
-                QgsMessageLog.logMessage("tile_number: " + str(tile_number | levelNumber))  
+                # QgsMessageLog.logMessage("tile_number: " + str(tile_number | levelNumber))  
                 tileidList.append(levelNumber | tile_number)
         
         return tileidList
