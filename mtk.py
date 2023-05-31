@@ -33,12 +33,8 @@ from .resources import *
 # Import the code for the dialog
 from .mtk_dock_widget import MapToolKitDockWidget
 import os.path
-import time
-import random
-from shapely import wkt, wkb
 import urllib
 import json
-from typing import Tuple, List
 
 from .core.NdsUtil import NdsUtil
 from .core.QgsCoordTrans import QgsCoordTrans
@@ -153,8 +149,6 @@ class MapToolKit:
 
     def coodinate_pick_finished(self, geometry: QgsGeometry):
         if not geometry.isEmpty():
-            # geometry = QgsCoordTrans.geometry_trans(geometry, QgsCoordTrans.COORD.COORD_WEBMERCATOR, QgsCoordTrans.COORD.COORD_WGS84)
-
             points = QgsCoordTrans.get_geometry_points(geometry)
             points_str = ','.join(list(map(lambda l : f'{l.x()},{l.y()}', points)))
             self.widget.text_simple_content.setPlainText(points_str)
@@ -177,7 +171,7 @@ class MapToolKit:
                 
                 request = QgsFeatureRequest().setFilterRect(self.canvas.extent())
                 features = nds_layer.getFeatures(request)
-                exist_tile_ids = set(map(lambda l : int(l.attributeMap()['tile_id']), features))
+                exist_tile_ids = set(map(lambda l : str(l.attributeMap()['tid']), features))
 
                 extent = self.iface.mapCanvas().extent()
                 crs = nds_layer.crs()
@@ -187,12 +181,14 @@ class MapToolKit:
         
                 x1, y1, x2, y2 = extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()
                 level = self.widget.spin_tile_level.value()
+
                 tile_ids = NdsUtil.get_bound_tileids(x1, y1, x2, y2, level)
+                tile_ids = list(map(lambda l : str(l), tile_ids))
 
                 tile_ids = list(filter(lambda l : l not in exist_tile_ids, tile_ids))
 
                 if len(tile_ids) != 0:
-                    tile_ids_str = ','.join(list(map(str, tile_ids)))
+                    tile_ids_str = ','.join(tile_ids)
                     self.draw_nds_tile_by_layer(nds_layer, tile_ids_str, QgsCoordTrans.COORD.COORD_WGS84)
         
     def draw_nds_tile_by_layer(self, nds_layer: QgsVectorLayer, tileid_str: str, coords_sys: str): 
@@ -201,10 +197,16 @@ class MapToolKit:
             return 
 
         fields = QgsFields()
-        fields.append(QgsField("tile_id", QVariant.LongLong))
+        fields.append(QgsField("tid", QVariant.String))
         fields.append(QgsField("level", QVariant.Int))
-
+        
         pr = nds_layer.dataProvider()
+
+        QgsMessageLog.logMessage(f'draw_nds_tile_by_layer fields count {fields.count()}')
+        QgsMessageLog.logMessage(f'draw_nds_tile_by_layer pr fields count {pr.fields().count()}')
+
+        for n in range(pr.fields().count()):
+            QgsMessageLog.logMessage(f'pr fields {n} {pr.fields()[n].name()}')
 
         tiles = list(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
         for tileid in tiles:
@@ -216,9 +218,12 @@ class MapToolKit:
 
             feature = QgsFeature(fields, tileid)
             feature.setGeometry(polygon)
-            feature['tile_id'] = tileid
+            feature['tid'] = str(tileid)
             feature['level'] = level
             # feature.setAttribute('level', level)
+
+            
+            QgsMessageLog.logMessage(f'draw_nds_tile_by_layer attributeCount count {feature.attributeCount()}')
             # polygon_feature.setSymbol(symbol)
 
             pr.addFeature(feature)
@@ -230,19 +235,19 @@ class MapToolKit:
         nds_layer.setShortName('nds')
         symbol = QgsFillSymbol.createSimple({'color': '#00000000', 'style': 'solid', 'outline_color': 'red', 'stroke_width': '1'})
         nds_layer.renderer().setSymbol(symbol)
-
-        fields = QgsFields()
-        fields.append(QgsField("tile_id", QVariant.UInt))
-        fields.append(QgsField("level", QVariant.Int))
         
-        nds_layer.dataProvider().addAttributes(fields)
+        pr = nds_layer.dataProvider()
+        ret = pr.addAttributes([QgsField("tid", QVariant.String), QgsField("level", QVariant.Int)])
         nds_layer.updateFields()
+        
+        QgsMessageLog.logMessage(f'draw_nds_tile_by_name fields count {pr.fields().count()} {ret}')
+        
 
         layer_settings = QgsPalLayerSettings()
         text_format = QgsTextFormat()
         text_format.setColor(QColor("red"))
         layer_settings.setFormat(text_format)
-        layer_settings.fieldName = "tile_id"
+        layer_settings.fieldName = "tid"
         layer_settings.placement = QgsPalLayerSettings.AroundPoint
         layer_settings.enabled = True
         labels = QgsVectorLayerSimpleLabeling(layer_settings)
@@ -321,7 +326,16 @@ class MapToolKit:
         self.draw_geometry(layer_name, geom)
 
     def button_draw_wkb_clicked(self):
-        geom = QgsGeometry.fromWkb(bytearray.fromhex(self.widget.text_wkt_content.toPlainText()))
+        text_content = self.widget.text_wkt_content.toPlainText()
+        geometries = list(map(lambda l : QgsGeometry.fromWkt(l.strip()), text_content.strip().split('\n')))
+        geom = QgsGeometryCollection()
+        for g in geometries:
+            geom.addGeometry(g)
+
+        if geom is None or geom.isEmpty():
+            self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Critical)
+            return 
+        
         coord_type = self.widget.combo_wkt_coordstype.currentText()
         geom = QgsCoordTrans.geometry_trans(geom, coord_type, QgsCoordTrans.COORD.COORD_WGS84)
         layer_name = self.widget.edit_wkt_layer_name.text()
@@ -339,10 +353,7 @@ class MapToolKit:
         layer = QgsVectorLayer(uri, layer_name, 'memory')
         layer.setShortName('geojson')
         pr = layer.dataProvider()
-
-        # 添加字段和特征到 Layer 中
-        for feature in features:
-            pr.addFeatures([feature])
+        pr.addFeatures(features)
 
         layer.updateExtents()
         QgsProject.instance().addMapLayer(layer)
@@ -392,7 +403,6 @@ class MapToolKit:
         result_str = QgsCoordTrans.coords_transform(coords_str, src_coords_sys, dest_coords_sys)
         self.widget.text_coords_b.setPlainText(result_str)
 
-
     def button_coordtransform_b2a_clicked(self):
         src_coords_sys = self.widget.combo_coords_b.currentText()
         dest_coords_sys = self.widget.combo_coords_a.currentText()
@@ -414,20 +424,6 @@ class MapToolKit:
 
         QgsProject.instance().addMapLayer(layer)  
 
-    def click_test(self):
-
-        QgsMessageLog.logMessage(f'aoh.... {type(self.canvas.mapTool())}')
-
-
-        # try:
-        #     # QgsMessageLog.logMessage('click')
-        #     # task1 : QgsTask = QgsTask.fromFunction('Waste cpu 1', self.mytask, on_finished=self.completed, arg1=3)
-        #     # self.task_manager.addTask(task1)
-
-        #     pass
-        # except Exception:
-        #     QgsMessageLog.logMessage('aoh....')
-
 class DrawTool(QgsMapTool):
     draw_finish_event = pyqtSignal(QgsGeometry)
 
@@ -438,11 +434,9 @@ class DrawTool(QgsMapTool):
         self.geometry_index = 0
         self.point_count = 0
         self.rubber_band = QgsRubberBand(self.canvas, self.geometry_type)
-        self.rubber_band.setColor(QColor(0x112233))
-
-
-    def reset(self):
-        self.rubber_band.reset(self.geometry_type)
+        self.rubber_band.setColor(QColor(QRgba64.fromRgba(255, 0, 0, 100)))
+        self.rubber_band.setFillColor(QColor(QRgba64.fromRgba(128, 128, 128, 75)))
+        self.rubber_band.setLineStyle(Qt.PenStyle.DashLine)
 
     def canvasPressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
@@ -455,21 +449,11 @@ class DrawTool(QgsMapTool):
             else:
                 self.geometry_index = self.geometry_index + 1
                 self.point_count = 0
-            # QgsMessageLog.logMessage(f'right {self.rubber_band.numberOfVertices()}')
-            # self.rubber_band.closePoints(True, self.rubber_band.numberOfVertices())
-
-    # def canvasReleaseEvent(self, event):
-    #     QgsMessageLog.logMessage('canvasReleaseEvent')
-    #     if event.button() == QtCore.Qt.RightButton:
-    #         geom = self.rubber_band.asGeometry()
-    #         self.draw_finish_event.emit(geom)
-
-    #         self.reset()
 
     def deactivate(self):
         geom = self.rubber_band.asGeometry()
         self.draw_finish_event.emit(geom)
 
-        self.reset()
+        self.rubber_band.reset(self.geometry_type)
         super().deactivate()
         

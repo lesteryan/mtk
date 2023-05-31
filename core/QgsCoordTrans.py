@@ -153,36 +153,6 @@ class QgsCoordTrans:
             seqs = list(itertools.chain.from_iterable(seqs))
         
         return seqs
-    
-        ret = []
-       
-        
-        if isinstance(g, QgsPoint):
-            ret.append(g)
-        elif isinstance(g, QgsLineString):
-            for p in g:
-                ret.append(QgsPoint(p))
-        elif isinstance(g, QgsPolygon):
-            dd = QgsPolygon()
-            for p in dd.exteriorRing().points():
-                ret.append(p)
-            for n in range(dd.numInteriorRings()):
-                for p in dd.interiorRing(n).points():
-                    ret.append(QgsPoint(p))
-        elif isinstance(g, QgsGeometryCollection):
-            seqs = g.coordinateSequence()
-            while isinstance(seqs[0], list):
-                seqs = list(itertools.chain.from_iterable(seqs))
-
-            for n in g.coordinateSequence():
-                for p in n:
-                    for a in p:
-                        QgsMessageLog.logMessage(f'{a.asWkt()}')
-                # for p in QgsCoordTrans.get_geometry_points(QgsGeometry(g.geometryN(n))):
-                #     ret.append(p)
-
-        
-        return ret
         
     @staticmethod
     def feature_trans(g: QgsFeature, from_coord: str, to_coord: str) -> QgsFeature:

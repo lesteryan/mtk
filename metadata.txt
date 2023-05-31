@@ -10,10 +10,10 @@ version=0.1
 author=lesteryan
 email=cgmsyx@163.com
 
-about=this is lesteryan's map tool kit
+about=This is a general plug-in for navigation software development engineers, which can display and pick up coordinates, data in wkb, wkt, geojson formats, and nds tiles.
 
-tracker=http://bugs
-repository=http://repo
+tracker=https://github.com/lesteryan/mtk
+repository=https://github.com/lesteryan/mtk
 # End of mandatory metadata
 
 # Recommended items:
@@ -23,9 +23,9 @@ hasProcessingProvider=no
 # changelog=
 
 # Tags are comma separated with spaces allowed
-tags=python
+tags=python wkt wkb geojson nds coordinate pick navi
 
-homepage=http://homepage
+homepage=https://github.com/lesteryan/mtk
 category=Plugins
 icon=icon.png
 # experimental flag
