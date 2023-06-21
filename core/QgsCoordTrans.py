@@ -4,7 +4,6 @@ from qgis.core import QgsGeometry, QgsPoint, QgsMultiPoint, QgsLineString, QgsMu
 from qgis.core import QgsFeature
 from .CoordTrans import CoordTrans
 from qgis.core import *
-import itertools
 
 class QgsCoordTrans:
 
@@ -136,6 +135,14 @@ class QgsCoordTrans:
             g =  QgsCoordTrans.polygon_trans(g, from_coord, to_coord)
         elif isinstance(g, QgsMultiPolygon):
             g = QgsCoordTrans.multipolygon_trans(g, from_coord, to_coord)
+        elif isinstance(g, QgsGeometryCollection):
+            g1 = QgsGeometryCollection()
+            # for gc in g:
+                # QgsMessageLog.logMessage('aaaaa')
+                # g1.addGeometry(QgsCoordTrans.geometry_trans(QgsGeometry(gc), from_coord, to_coord).constGet())
+            QgsMessageLog.logMessage('bbbbb')
+            # g = g1
+            
         else:
             raise Exception(f'unsupport geometry type {g.asWkt()} {type(g).__name__}')
         
@@ -143,16 +150,22 @@ class QgsCoordTrans:
     
     @staticmethod
     def get_geometry_points(geometry: QgsGeometry) -> list[QgsPoint]:
-
         if geometry is None or geometry.isEmpty():
             return []
         
         g = geometry.constGet()
         seqs = g.coordinateSequence()
-        while isinstance(seqs[0], list):
-            seqs = list(itertools.chain.from_iterable(seqs))
-        
-        return seqs
+
+        def flatten_list(lst):
+            result = []
+            for item in lst:
+                if isinstance(item, list):
+                    result.extend(flatten_list(item))
+                else:
+                    result.append(item)
+            return result
+
+        return flatten_list(seqs)
         
     @staticmethod
     def feature_trans(g: QgsFeature, from_coord: str, to_coord: str) -> QgsFeature:

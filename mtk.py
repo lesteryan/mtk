@@ -125,29 +125,29 @@ class MapToolKit:
 
     def button_coordpick_point_cliked(self):
         if self.map_tool is not None:
-            self.map_tool.draw_finish_event.disconnect(self.coodinate_pick_finished)
+            self.map_tool.draw_finish_event.disconnect(self.coordpick_finished)
 
         self.map_tool = DrawTool(self.canvas, QgsWkbTypes.PointGeometry)
-        self.map_tool.draw_finish_event.connect(self.coodinate_pick_finished)
+        self.map_tool.draw_finish_event.connect(self.coordpick_finished)
         self.canvas.setMapTool(self.map_tool)
 
     def button_coordpick_line_cliked(self):
         if self.map_tool is not None:
-            self.map_tool.draw_finish_event.disconnect(self.coodinate_pick_finished)
+            self.map_tool.draw_finish_event.disconnect(self.coordpick_finished)
 
         self.map_tool = DrawTool(self.canvas, QgsWkbTypes.LineGeometry)
-        self.map_tool.draw_finish_event.connect(self.coodinate_pick_finished)
+        self.map_tool.draw_finish_event.connect(self.coordpick_finished)
         self.canvas.setMapTool(self.map_tool)
 
     def button_coordpick_polygon_cliked(self):
         if self.map_tool is not None:
-            self.map_tool.draw_finish_event.disconnect(self.coodinate_pick_finished)
+            self.map_tool.draw_finish_event.disconnect(self.coordpick_finished)
 
         self.map_tool = DrawTool(self.canvas, QgsWkbTypes.PolygonGeometry)
-        self.map_tool.draw_finish_event.connect(self.coodinate_pick_finished)
+        self.map_tool.draw_finish_event.connect(self.coordpick_finished)
         self.canvas.setMapTool(self.map_tool)
 
-    def coodinate_pick_finished(self, geometry: QgsGeometry):
+    def coordpick_finished(self, geometry: QgsGeometry):
         if not geometry.isEmpty():
             points = QgsCoordTrans.get_geometry_points(geometry)
             points_str = ','.join(list(map(lambda l : f'{l.x()},{l.y()}', points)))
@@ -305,20 +305,20 @@ class MapToolKit:
         elif isinstance(geometry, QgsLineString) or isinstance(geometry, QgsMultiLineString):
             return 'LineString'
         elif isinstance(geometry, QgsPolygon) or isinstance(geometry, QgsMultiPolygon):
-            return 'Polygon'
+            return 'Polygon'        
 
-        raise Exception(f'invalid geometry type {type(geometry)}')
+        raise Exception(f'invalid geometry type {g.asWkt()}')
 
     def button_draw_wkt_clicked(self):
         text_content = self.widget.text_wkt_content.toPlainText()
         geometries = list(map(lambda l : QgsGeometry.fromWkt(l.strip()), text_content.strip().split('\n')))
-        geom = QgsGeometryCollection()
-        for g in geometries:
-            geom.addGeometry(g)
+        geom = geometries[0]
 
         if geom is None or geom.isEmpty():
             self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Critical)
             return 
+        
+        geom = QgsGeometry(geom)
     
         coord_type = self.widget.combo_wkt_coordstype.currentText()
         geom = QgsCoordTrans.geometry_trans(geom, coord_type, QgsCoordTrans.COORD.COORD_WGS84)
@@ -330,11 +330,13 @@ class MapToolKit:
         geometries = list(map(lambda l : QgsGeometry.fromWkt(l.strip()), text_content.strip().split('\n')))
         geom = QgsGeometryCollection()
         for g in geometries:
-            geom.addGeometry(g)
+            geom.addGeometry(g.get())
 
         if geom is None or geom.isEmpty():
             self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Critical)
             return 
+        
+        geom = QgsGeometry(geom)
         
         coord_type = self.widget.combo_wkt_coordstype.currentText()
         geom = QgsCoordTrans.geometry_trans(geom, coord_type, QgsCoordTrans.COORD.COORD_WGS84)
@@ -419,7 +421,6 @@ class MapToolKit:
         
         layer_uri = urllib.parse.quote(layer_uri)
         layer_uri = f'url={layer_uri}&type=xyz&zmax=18&zmin=0'
-        QgsMessageLog.logMessage(layer_uri)
         layer = QgsRasterLayer(layer_uri, layer_name, "wms")
 
         QgsProject.instance().addMapLayer(layer)  
