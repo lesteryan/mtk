@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from qgis.core import QgsGeometry, QgsPoint, QgsMultiPoint, QgsLineString, QgsMultiLineString, QgsPolygon, QgsMultiPolygon, QgsGeometryCollection
+from qgis.core import QgsGeometry, QgsPoint, QgsMultiPoint, QgsLineString, QgsMultiLineString, QgsPolygon, QgsMultiPolygon, QgsRectangle, QgsGeometryCollection
 from qgis.core import QgsFeature
 from .CoordTrans import CoordTrans
-from qgis.core import *
 
 class QgsCoordTrans:
 
@@ -102,7 +101,13 @@ class QgsCoordTrans:
             ret.addInteriorRing(inter_ring)
         
         return ret
+    
+    @staticmethod
+    def rectangle_trans(rectangle: QgsRectangle, from_coord: str, to_coord: str) -> QgsPolygon:
+        p1 = QgsCoordTrans.point_trans(QgsPoint(rectangle.xMinimum(), rectangle.yMinimum()), from_coord, to_coord)
+        p2 = QgsCoordTrans.point_trans(QgsPoint(rectangle.xMinimum(), rectangle.yMinimum()), from_coord, to_coord)
 
+        return QgsRectangle(p1.x, p1.y, p2.x, p2.y)
 
     @staticmethod
     def multipolygon_trans(multi_polygon: QgsMultiPolygon, from_coord: str, to_coord: str) -> QgsMultiPolygon:
@@ -121,32 +126,37 @@ class QgsCoordTrans:
         if from_coord == to_coord:
             return geometry
         
-        g = geometry.constGet()
-        
-        if isinstance(g, QgsPoint):
-            g = QgsCoordTrans.point_trans(g, from_coord, to_coord)
-        elif isinstance(g, QgsMultiPoint):
-            g = QgsCoordTrans.multipoint_trans(g, from_coord, to_coord)
-        elif isinstance(g, QgsLineString):
-            g = QgsCoordTrans.linestring_trans(g, from_coord, to_coord)
-        elif isinstance(g, QgsMultiLineString):
-            g = QgsCoordTrans.multilinestring_trans(g, from_coord, to_coord)
-        elif isinstance(g, QgsPolygon):
-            g =  QgsCoordTrans.polygon_trans(g, from_coord, to_coord)
-        elif isinstance(g, QgsMultiPolygon):
-            g = QgsCoordTrans.multipolygon_trans(g, from_coord, to_coord)
-        elif isinstance(g, QgsGeometryCollection):
-            g1 = QgsGeometryCollection()
-            # for gc in g:
-                # QgsMessageLog.logMessage('aaaaa')
-                # g1.addGeometry(QgsCoordTrans.geometry_trans(QgsGeometry(gc), from_coord, to_coord).constGet())
-            QgsMessageLog.logMessage('bbbbb')
-            # g = g1
-            
+        if isinstance(geometry, QgsRectangle):
+            return QgsCoordTrans.rectangle_trans(geometry, from_coord, to_coord)
         else:
-            raise Exception(f'unsupport geometry type {g.asWkt()} {type(g).__name__}')
-        
-        return QgsGeometry(g)
+            g = geometry.constGet()
+            
+            if isinstance(g, QgsPoint):
+                g = QgsCoordTrans.point_trans(g, from_coord, to_coord)
+            elif isinstance(g, QgsMultiPoint):
+                g = QgsCoordTrans.multipoint_trans(g, from_coord, to_coord)
+            elif isinstance(g, QgsRectangle):
+                g = QgsCoordTrans.rectangle_trans(g, from_coord, to_coord)
+            elif isinstance(g, QgsLineString):
+                g = QgsCoordTrans.linestring_trans(g, from_coord, to_coord)
+            elif isinstance(g, QgsMultiLineString):
+                g = QgsCoordTrans.multilinestring_trans(g, from_coord, to_coord)
+            elif isinstance(g, QgsPolygon):
+                g =  QgsCoordTrans.polygon_trans(g, from_coord, to_coord)
+            elif isinstance(g, QgsMultiPolygon):
+                g = QgsCoordTrans.multipolygon_trans(g, from_coord, to_coord)
+            elif isinstance(g, QgsGeometryCollection):
+                g1 = QgsGeometryCollection()
+                # for gc in g:
+                    # QgsMessageLog.logMessage('aaaaa')
+                    # g1.addGeometry(QgsCoordTrans.geometry_trans(QgsGeometry(gc), from_coord, to_coord).constGet())
+                QgsMessageLog.logMessage('bbbbb')
+                # g = g1
+                
+            else:
+                raise Exception(f'unsupport geometry type {g.asWkt()} {type(g).__name__}')
+            
+            return QgsGeometry(g)
     
     @staticmethod
     def get_geometry_points(geometry: QgsGeometry) -> list[QgsPoint]:

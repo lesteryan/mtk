@@ -37,6 +37,7 @@ import urllib
 import json
 
 from .core.NdsUtil import NdsUtil
+from .core.MerTileUtil import MerTileUtil
 from .core.QgsCoordTrans import QgsCoordTrans
 
 
@@ -99,6 +100,9 @@ class MapToolKit:
         self.widget.button_draw_nds_wgs84.clicked.connect(self.button_draw_nds_wgs84_clicked)
         self.widget.button_draw_nds_gcj02.clicked.connect(self.button_draw_nds_gcj02_clicked)
         self.widget.button_get_bound_tile.clicked.connect(self.button_get_bound_tile_clicked)
+
+        self.widget.button_draw_mer_tile.clicked.connect(self.button_draw_mer_tile_clicked)
+        self.widget.button_get_bound_mer_tile.clicked.connect(self.button_get_bound_mer_tile_clicked)
 
         self.widget.button_draw_coordpick_point.clicked.connect(self.button_coordpick_point_cliked)
         self.widget.button_draw_coordpick_line.clicked.connect(self.button_coordpick_line_cliked)
@@ -212,6 +216,8 @@ class MapToolKit:
         for tileid in tiles:
             level = NdsUtil.get_tile_level(tileid)
             p = NdsUtil.get_tile_polygon_of_deg(tileid)
+
+            QgsMessageLog.logMessage(f'pppp {len(p)} {p[0]}, {p[1]}, {p[2]}, {p[3]}')
             points = list(map(lambda l : QgsPointXY(l[0], l[1]), p))
             polygon = QgsGeometry.fromPolygonXY([points])
             polygon = QgsCoordTrans.geometry_trans(polygon, coords_sys, QgsCoordTrans.COORD.COORD_WGS84)
@@ -220,15 +226,42 @@ class MapToolKit:
             feature.setGeometry(polygon)
             feature['tid'] = str(tileid)
             feature['level'] = level
-            # feature.setAttribute('level', level)
-
-            
-            QgsMessageLog.logMessage(f'draw_nds_tile_by_layer attributeCount count {feature.attributeCount()}')
-            # polygon_feature.setSymbol(symbol)
 
             pr.addFeature(feature)
         
         nds_layer.updateExtents()
+
+    def draw_mer_tile_by_layer(self, mer_layer: QgsVectorLayer, tileid_str: str, coords_sys: str): 
+        if(len(tileid_str) == 0):
+            self.iface.messageBar().pushMessage("Error", "invalid nds string", level=Qgis.Critical)
+            return 
+
+        fields = QgsFields()
+        fields.append(QgsField("tid", QVariant.String))
+        fields.append(QgsField("level", QVariant.Int))
+        
+        pr = mer_layer.dataProvider()
+
+        tiles = list(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
+        for tileid in tiles:
+            level = tileid >> 56
+            p = MerTileUtil.get_tile_polygon(tileid)
+            
+            points = list(map(lambda l : QgsPointXY(l[0], l[1]), p))
+
+
+            QgsMessageLog.logMessage(f'aaaa {p[0]}, {p[1]}, {p[2]}, {p[3]}')
+            polygon = QgsGeometry.fromPolygonXY([points])
+            polygon = QgsCoordTrans.geometry_trans(polygon, coords_sys, QgsCoordTrans.COORD.COORD_WGS84)
+
+            feature = QgsFeature(fields, tileid)
+            feature.setGeometry(polygon)
+            feature['tid'] = str(tileid)
+            feature['level'] = level
+
+            pr.addFeature(feature)
+        
+        mer_layer.updateExtents()
 
     def draw_nds_tile_by_name(self, layer_name: str, tileid_str: str, coords_sys: str):
         nds_layer = QgsVectorLayer(f'Polygon?crs={self.epsg_id_wgs84}', layer_name, 'memory')
@@ -259,6 +292,35 @@ class MapToolKit:
 
         self.draw_nds_tile_by_layer(nds_layer, tileid_str, coords_sys)
 
+    def button_draw_mer_tile_clicked(self):
+        layer_name = self.widget.edit_mer_tile_layer_name.text()
+        tileid_str = self.widget.text_mer_tile_content.toPlainText()
+
+        mer_layer = QgsVectorLayer(f'Polygon?crs={self.epsg_id_wgs84}', layer_name, 'memory')
+        mer_layer.setShortName('mer_tile')
+        symbol = QgsFillSymbol.createSimple({'color': '#00000000', 'style': 'solid', 'outline_color': 'red', 'stroke_width': '1'})
+        mer_layer.renderer().setSymbol(symbol)
+        
+        pr = mer_layer.dataProvider()
+        ret = pr.addAttributes([QgsField("tid", QVariant.String), QgsField("level", QVariant.Int)])
+        mer_layer.updateFields()
+
+        layer_settings = QgsPalLayerSettings()
+        text_format = QgsTextFormat()
+        text_format.setColor(QColor("red"))
+        layer_settings.setFormat(text_format)
+        layer_settings.fieldName = "tid"
+        layer_settings.placement = QgsPalLayerSettings.AroundPoint
+        layer_settings.enabled = True
+        labels = QgsVectorLayerSimpleLabeling(layer_settings)
+
+        mer_layer.setLabeling(labels)
+        mer_layer.setLabelsEnabled(True)
+
+        QgsProject.instance().addMapLayer(mer_layer)
+
+        self.draw_mer_tile_by_layer(mer_layer, tileid_str, QgsCoordTrans.COORD.COORD_WGS84)
+
     def button_draw_nds_wgs84_clicked(self):
         self.draw_nds_tile_by_name(self.widget.edit_tile_layer_name.text(), self.widget.text_tile_content.toPlainText(), QgsCoordTrans.COORD.COORD_WGS84)
 
@@ -277,6 +339,25 @@ class MapToolKit:
         tile_ids = NdsUtil.get_bound_tileids(x1, y1, x2, y2, level)
         tile_ids_str = ','.join(list(map(str, tile_ids)))
         self.widget.text_tile_content.setPlainText(tile_ids_str)
+
+    def button_get_bound_mer_tile_clicked(self):
+        extent = self.iface.mapCanvas().extent()
+    
+        crs = self.iface.activeLayer().crs()
+
+        x1, y1, x2, y2 = extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()
+        QgsMessageLog.logMessage(f'mer {x1}, {y1}, {x2}, {y2} {crs.authid()}')
+
+        # if(crs.authid() != self.epsg_id_webmercator):
+        #     extent = QgsCoordTrans.geometry_trans(extent, QgsCoordTrans.COORD.COORD_WGS84, QgsCoordTrans.COORD.COORD_WEBMERCATOR)
+   
+        x1, y1, x2, y2 = extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()
+        QgsMessageLog.logMessage(f'mer {x1}, {y1}, {x2}, {y2}')
+        level = self.widget.spin_mer_tile_level.value()
+        tile_ids = MerTileUtil.get_tiles(x1, y1, x2, y2, level)
+        tile_ids_str = ','.join(list(map(str, tile_ids)))
+        self.widget.text_mer_tile_content.setPlainText(tile_ids_str)
+
 
     def combo_xyz_index_changed(self):
         xyz_name = self.widget.combo_xyzlayer_layertype.currentText()
