@@ -161,6 +161,8 @@ class MapToolKit:
             self.widget.text_geojson_content.setPlainText(json.dumps(json.loads(geometry.asJson()), indent=4))
 
     def handleLayerExtentChanged(self, layer = None):
+        QgsMessageLog.logMessage(f'project crs {QgsProject.instance().crs().authid()}')
+
         if self.canvas.scale() > 194089792:
             reply = QMessageBox.question(self.dlg, 'tips', 'canvas scale too large, go to default zoom ?', QMessageBox.Yes | QMessageBox.No | QMessageBox.NoToAll, QMessageBox.Yes)
 
@@ -172,20 +174,23 @@ class MapToolKit:
             level = self.widget.spin_tile_level.value()
             nds_layers = QgsProject.instance().mapLayersByShortName('nds')
             num = int(scale / pow(2, level))
-            if len(nds_layers) != 0 and num < 1000:
+
+            if len(nds_layers) != 0:
+                nds_layer = self.create_nds_layer('nds-tile-layer')
+            else:
                 nds_layer = nds_layers[0]
+
+            if len(nds_layers) != 0 and num < 1000:
                 request = QgsFeatureRequest().setFilterRect(self.canvas.extent())
                 features = nds_layer.getFeatures(request)
                 exist_tile_ids = set(map(lambda l : str(l.attributeMap()['tid']), features))
 
                 extent = self.iface.mapCanvas().extent()
-                crs = nds_layer.crs()
-                if(crs.authid() != self.epsg_id_wgs84):
-                    transform = QgsCoordinateTransform(crs, QgsCoordinateReferenceSystem(self.epsg_id_wgs84), QgsProject.instance())
+                if QgsProject.instance().crs().authid() != self.epsg_id_wgs84:
+                    transform = QgsCoordinateTransform(QgsProject.instance().crs(), QgsCoordinateReferenceSystem(self.epsg_id_wgs84), QgsProject.instance())
                     extent = transform.transform(extent)
-        
+
                 x1, y1, x2, y2 = extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()
-                
                 tile_ids = NdsUtil.get_bound_tileids(x1, y1, x2, y2, level)
                 tile_ids = list(map(lambda l : str(l), tile_ids))
                 tile_ids = list(filter(lambda l : l not in exist_tile_ids, tile_ids))
@@ -197,14 +202,21 @@ class MapToolKit:
             mer_layers = QgsProject.instance().mapLayersByShortName('mer_tile')
             level = self.widget.spin_mer_tile_level.value()
             num = int(scale / pow(2, level))
-            if len(mer_layers) != 0 and num < 1000:
+
+            if len(mer_layers) != 0:
+                mer_layer = self.create_mer_tile_layer('mercator-tile-layer')
+            else:
                 mer_layer = mer_layers[0]
-                
+
+            if num < 1000:
                 request = QgsFeatureRequest().setFilterRect(self.canvas.extent())
                 features = mer_layer.getFeatures(request)
                 exist_tile_ids = set(map(lambda l : str(l.attributeMap()['tid']), features))
 
                 extent = self.iface.mapCanvas().extent()
+                if QgsProject.instance().crs().authid() != self.epsg_id_webmercator:
+                    transform = QgsCoordinateTransform(QgsProject.instance().crs(), QgsCoordinateReferenceSystem(self.epsg_id_webmercator), QgsProject.instance())
+                    extent = transform.transform(extent)
 
                 x1, y1, x2, y2 = extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()
                 
@@ -343,7 +355,7 @@ class MapToolKit:
         layer_name = self.widget.edit_mer_tile_layer_name.text()
         tileid_str = self.widget.text_mer_tile_content.toPlainText()
 
-        mer_layer = create_mer_tile_layer(layer_name)
+        mer_layer = self.create_mer_tile_layer(layer_name)
 
         self.draw_mer_tile_by_layer(mer_layer, tileid_str)
 
@@ -357,8 +369,11 @@ class MapToolKit:
 
     def button_get_bound_tile_clicked(self):
         extent = self.iface.mapCanvas().extent()
-        transform = QgsCoordinateTransform(QgsCoordinateReferenceSystem(self.epsg_id_webmercator), QgsCoordinateReferenceSystem(self.epsg_id_wgs84), QgsProject.instance())
-        extent = transform.transform(extent)
+
+        if QgsProject.instance().crs().authid() != self.epsg_id_wgs84:
+            transform = QgsCoordinateTransform(QgsProject.instance().crs(), QgsCoordinateReferenceSystem(self.epsg_id_wgs84), QgsProject.instance())
+            extent = transform.transform(extent)
+
         x1, y1, x2, y2 = extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()
         level = self.widget.spin_tile_level.value()
         tile_ids = NdsUtil.get_bound_tileids(x1, y1, x2, y2, level)
@@ -367,6 +382,11 @@ class MapToolKit:
 
     def button_get_bound_mer_tile_clicked(self):
         extent = self.iface.mapCanvas().extent()
+      
+        if QgsProject.instance().crs().authid() != self.epsg_id_webmercator:
+            transform = QgsCoordinateTransform(QgsProject.instance().crs(), QgsCoordinateReferenceSystem(self.epsg_id_webmercator), QgsProject.instance())
+            extent = transform.transform(extent)
+
         x1, y1, x2, y2 = extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()
         level = self.widget.spin_mer_tile_level.value()
         tile_ids = MerTileUtil.get_tiles(x1, y1, x2, y2, level)
