@@ -127,6 +127,7 @@ class MapToolKit:
         if self.map_tool is not None:
             self.canvas.unsetMapTool(self.map_tool)
 
+
     def button_coordpick_point_cliked(self):
         if self.map_tool is not None:
             self.map_tool.draw_finish_event.disconnect(self.coordpick_finished)
@@ -161,8 +162,6 @@ class MapToolKit:
             self.widget.text_geojson_content.setPlainText(json.dumps(json.loads(geometry.asJson()), indent=4))
 
     def handleLayerExtentChanged(self, layer = None):
-        QgsMessageLog.logMessage(f'project crs {QgsProject.instance().crs().authid()}')
-
         if self.canvas.scale() > 194089792:
             reply = QMessageBox.question(self.dlg, 'tips', 'canvas scale too large, go to default zoom ?', QMessageBox.Yes | QMessageBox.No | QMessageBox.NoToAll, QMessageBox.Yes)
 
@@ -175,7 +174,7 @@ class MapToolKit:
             nds_layers = QgsProject.instance().mapLayersByShortName('nds')
             num = int(scale / pow(2, level))
 
-            if len(nds_layers) != 0:
+            if len(nds_layers) == 0:
                 nds_layer = self.create_nds_layer('nds-tile-layer')
             else:
                 nds_layer = nds_layers[0]
@@ -203,7 +202,7 @@ class MapToolKit:
             level = self.widget.spin_mer_tile_level.value()
             num = int(scale / pow(2, level))
 
-            if len(mer_layers) != 0:
+            if len(mer_layers) == 0:
                 mer_layer = self.create_mer_tile_layer('mercator-tile-layer')
             else:
                 mer_layer = mer_layers[0]
@@ -234,17 +233,10 @@ class MapToolKit:
         if(len(tileid_str) == 0):
             self.iface.messageBar().pushMessage("Error", "invalid nds string", level=Qgis.Critical)
             return 
-
-        fields = QgsFields()
-        fields.append(QgsField("tid", QVariant.String))
-        fields.append(QgsField("level", QVariant.Int))
         
         pr = nds_layer.dataProvider()
 
-        for n in range(pr.fields().count()):
-            QgsMessageLog.logMessage(f'pr fields {n} {pr.fields()[n].name()}')
-
-        tiles = list(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
+        tiles = set(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
         for tileid in tiles:
             level = NdsUtil.get_tile_level(tileid)
             p = NdsUtil.get_tile_polygon_of_deg(tileid)
@@ -253,7 +245,7 @@ class MapToolKit:
             polygon = QgsGeometry.fromPolygonXY([points])
             polygon = QgsCoordTrans.geometry_trans(polygon, coords_sys, QgsCoordTrans.COORD.COORD_WGS84)
 
-            feature = QgsFeature(fields, tileid)
+            feature = QgsFeature(pr.fields(), tileid)
             feature.setGeometry(polygon)
             feature['tid'] = str(tileid)
             feature['level'] = level
@@ -266,14 +258,10 @@ class MapToolKit:
         if(len(tileid_str) == 0):
             self.iface.messageBar().pushMessage("Error", "invalid nds string", level=Qgis.Critical)
             return 
-
-        fields = QgsFields()
-        fields.append(QgsField("tid", QVariant.String))
-        fields.append(QgsField("level", QVariant.Int))
         
         pr = mer_layer.dataProvider()
 
-        tiles = list(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
+        tiles = set(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
         for tileid in tiles:
             level = tileid >> 56
             p = MerTileUtil.get_tile_polygon(tileid)
@@ -282,10 +270,12 @@ class MapToolKit:
 
             polygon = QgsGeometry.fromPolygonXY([points])
 
-            feature = QgsFeature(fields, tileid)
+            feature = QgsFeature(pr.fields(), tileid)
             feature.setGeometry(polygon)
             feature['tid'] = str(tileid)
             feature['level'] = level
+            feature['x'] = int(tileid & 0xFFFFFFF)
+            feature['y'] = int((tileid >> 28) & 0xFFFFFFF)
 
             pr.addFeature(feature)
         
@@ -309,7 +299,8 @@ class MapToolKit:
         text_format = QgsTextFormat()
         text_format.setColor(QColor("red"))
         layer_settings.setFormat(text_format)
-        layer_settings.fieldName = "tid"
+        layer_settings.fieldName = 'array_to_string(array(level, tid))'
+        layer_settings.isExpression = True
         layer_settings.placement = QgsPalLayerSettings.AroundPoint
         layer_settings.enabled = True
         labels = QgsVectorLayerSimpleLabeling(layer_settings)
@@ -326,20 +317,21 @@ class MapToolKit:
         if layers != None and len(layers) != 0 and not repeate:
             return layers[0]
 
-        mer_layer = QgsVectorLayer(f'Polygon?crs={self.epsg_id_webmercator}', layer_name, 'memory')
+        mer_layer = QgsVectorLayer(f'Polygon?crs={self.epsg_id_wgs84}', layer_name, 'memory')
         mer_layer.setShortName('mer_tile')
         symbol = QgsFillSymbol.createSimple({'color': '#00000000', 'style': 'solid', 'outline_color': 'red', 'stroke_width': '1'})
         mer_layer.renderer().setSymbol(symbol)
         
         pr = mer_layer.dataProvider()
-        ret = pr.addAttributes([QgsField("tid", QVariant.String), QgsField("level", QVariant.Int)])
+        ret = pr.addAttributes([QgsField("tid", QVariant.String), QgsField("level", QVariant.Int), QgsField("x", QVariant.Int), QgsField("y", QVariant.Int)])
         mer_layer.updateFields()
 
         layer_settings = QgsPalLayerSettings()
         text_format = QgsTextFormat()
         text_format.setColor(QColor("red"))
         layer_settings.setFormat(text_format)
-        layer_settings.fieldName = "tid"
+        layer_settings.fieldName = 'array_to_string(array(level, x, y))'
+        layer_settings.isExpression = True
         layer_settings.placement = QgsPalLayerSettings.AroundPoint
         layer_settings.enabled = True
         labels = QgsVectorLayerSimpleLabeling(layer_settings)

@@ -145,13 +145,13 @@ class QgsCoordTrans:
                 g =  QgsCoordTrans.polygon_trans(g, from_coord, to_coord)
             elif isinstance(g, QgsMultiPolygon):
                 g = QgsCoordTrans.multipolygon_trans(g, from_coord, to_coord)
-            elif isinstance(g, QgsGeometryCollection):
-                g1 = QgsGeometryCollection()
-                # for gc in g:
-                    # QgsMessageLog.logMessage('aaaaa')
-                    # g1.addGeometry(QgsCoordTrans.geometry_trans(QgsGeometry(gc), from_coord, to_coord).constGet())
-                QgsMessageLog.logMessage('bbbbb')
-                # g = g1
+            # elif isinstance(g, QgsGeometryCollection):
+            #     g1 = QgsGeometryCollection()
+            #     # for gc in g:
+            #         # QgsMessageLog.logMessage('aaaaa')
+            #         # g1.addGeometry(QgsCoordTrans.geometry_trans(QgsGeometry(gc), from_coord, to_coord).constGet())
+            #     QgsMessageLog.logMessage('bbbbb')
+            #     # g = g1
                 
             else:
                 raise Exception(f'unsupport geometry type {g.asWkt()} {type(g).__name__}')
