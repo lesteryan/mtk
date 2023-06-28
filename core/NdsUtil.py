@@ -31,10 +31,6 @@ class NdsUtil:
 
     @staticmethod
     def get_tile_level(tile_id: int):
-        """
-        >>> get_tile_level(557467556)
-        13
-        """
         level = 15
         while not tile_id & 0x80000000:
             tile_id <<= 1

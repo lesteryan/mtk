@@ -231,7 +231,7 @@ class MapToolKit:
         
     def draw_nds_tile_by_layer(self, nds_layer: QgsVectorLayer, tileid_str: str, coords_sys: str): 
         if(len(tileid_str) == 0):
-            self.iface.messageBar().pushMessage("Error", "invalid nds string", level=Qgis.Critical)
+            self.iface.messageBar().pushMessage("Error", "invalid nds string", level=Qgis.Warning)
             return 
         
         pr = nds_layer.dataProvider()
@@ -239,6 +239,11 @@ class MapToolKit:
         tiles = set(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
         for tileid in tiles:
             level = NdsUtil.get_tile_level(tileid)
+
+            if level < 1 or level > 15:
+                self.iface.messageBar().pushMessage("Error", f"invalid tile id {tileid}", level=Qgis.Warning)
+                continue
+
             p = NdsUtil.get_tile_polygon_of_deg(tileid)
 
             points = list(map(lambda l : QgsPointXY(l[0], l[1]), p))
@@ -256,7 +261,7 @@ class MapToolKit:
 
     def draw_mer_tile_by_layer(self, mer_layer: QgsVectorLayer, tileid_str: str): 
         if(len(tileid_str) == 0):
-            self.iface.messageBar().pushMessage("Error", "invalid nds string", level=Qgis.Critical)
+            self.iface.messageBar().pushMessage("Error", "invalid nds string", level=Qgis.Warning)
             return 
         
         pr = mer_layer.dataProvider()
@@ -264,6 +269,11 @@ class MapToolKit:
         tiles = set(map(lambda x : int(x.strip()), tileid_str.strip().split(',')))
         for tileid in tiles:
             level = tileid >> 56
+
+            if level < 1 or level > 25:
+                self.iface.messageBar().pushMessage("Error", f"invalid tile id {tileid}", level=Qgis.Warning)
+                continue
+
             p = MerTileUtil.get_tile_polygon(tileid)
             
             points = list(map(lambda l : QgsPointXY(l[0], l[1]), p))
@@ -420,7 +430,7 @@ class MapToolKit:
         geom = geometries[0]
 
         if geom is None or geom.isEmpty():
-            self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Critical)
+            self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Warning)
             return 
         
         geom = QgsGeometry(geom)
@@ -438,7 +448,7 @@ class MapToolKit:
             geom.addGeometry(g.get())
 
         if geom is None or geom.isEmpty():
-            self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Critical)
+            self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Warning)
             return 
         
         geom = QgsGeometry(geom)
@@ -469,6 +479,13 @@ class MapToolKit:
     def draw_simple_feature(self, layer_name: str, coords_str: str, mode: int, coords_sys: str):
         coords = list(map(lambda x : float(x.strip()), coords_str.strip().split(',')))
         points = []
+
+        if len(coords) % 2 != 0:
+            self.iface.messageBar().pushMessage("Error", f"invalid coords num, should be odd!", level=Qgis.Warning)
+            return 
+        elif len(coords) == 0:
+            return 
+
         for i in range(0, len(coords), 2):
             x, y = coords[i + 0], coords[i + 1]
             points.append(QgsPointXY(x, y))
