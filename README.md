@@ -1,0 +1,1 @@
+MTK is a tool set for map navigation developers, which includes the functions of drawing and picking up points, lines and polygons, inquiring and drawing NDS tiles and mercator tiles, displaying in WKT/WKB format and geojson format, wgs84/gcj02 coordinate system transfer, etc.
