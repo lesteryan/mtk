@@ -5,12 +5,12 @@
 [general]
 name=MapToolKit
 qgisMinimumVersion=3.0
-description=lesteryan map tool kit
+description=This is a general plug-in for navigation software development engineers
 version=0.1
 author=lesteryan
 email=cgmsyx@163.com
 
-about=This is a general plug-in for navigation software development engineers, which can display and pick up coordinates, data in wkb, wkt, geojson formats, and nds tiles.
+about=a tool set for map navigation developers, which includes the functions of drawing and picking up points, lines and polygons, inquiring and drawing NDS tiles and mercator tiles, displaying in WKT/WKB format and geojson format, wgs84/gcj02 coordinate system transfer, etc.
 
 tracker=https://github.com/lesteryan/mtk
 repository=https://github.com/lesteryan/mtk
@@ -23,7 +23,7 @@ hasProcessingProvider=no
 # changelog=
 
 # Tags are comma separated with spaces allowed
-tags=python wkt wkb geojson nds coordinate pick navi
+tags=python wkt wkb geojson nds coordinate pick navi gcj02 wgs84
 
 homepage=https://github.com/lesteryan/mtk
 category=Plugins

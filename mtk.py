@@ -35,6 +35,7 @@ from .mtk_dock_widget import MapToolKitDockWidget
 import os.path
 import urllib
 import json
+import re
 
 from .core.NdsUtil import NdsUtil
 from .core.MerTileUtil import MerTileUtil
@@ -53,6 +54,11 @@ class MapToolKit:
         'amap satelite':'https://webst03.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
         'osm vector':'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         }
+    coords_pattern = r'[^0-9,.]'
+    closed = False
+    dlg = None
+    map_tool = None
+    action = None
 
     def __init__(self, iface : QgisInterface):
         self.iface = iface
@@ -77,13 +83,31 @@ class MapToolKit:
 
     def tr(self, message):
         return QCoreApplication.translate('MapToolKit', message)
+    
+    def show_dock(self):
+        if self.closed:
+            self.initGui()
+            self.closed = False
+
+    def close_dock(self):
+        self.closed = True
+        self.action.setEnabled(True)
 
     def initGui(self):
+        self.unload()
+
         self.dlg = MapToolKitDockWidget()
         self.iface.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.dlg)
 
         self.widget = self.dlg.widget
         self.map_tool = None
+        
+        self.action = QAction(icon=QIcon(':/plugins/mtk/icon.png'), text=self.tr('Show Tool Dock'), parent=self.iface.mainWindow())
+        self.action.triggered.connect(self.show_dock)
+        self.action.setEnabled(False)
+        self.iface.addToolBarIcon(self.action)
+
+        self.dlg.closed.connect(self.close_dock)
 
         self.widget.combo_simple_coordstype.addItems(self.supported_coords)
         self.widget.combo_wkt_coordstype.addItems(self.supported_coords)
@@ -123,9 +147,18 @@ class MapToolKit:
         self.canvas.extentsChanged.connect(self.handleLayerExtentChanged)
 
     def unload(self):
-        self.iface.removeDockWidget(self.dlg)
+        if self.dlg is not None:
+            self.iface.removeDockWidget(self.dlg)
+            self.dlg = None
+
         if self.map_tool is not None:
             self.canvas.unsetMapTool(self.map_tool)
+
+        if self.action is not None:
+            self.iface.removePluginMenu(
+                self.tr(u'&MapToolKit'),
+                self.action)
+            self.iface.removeToolBarIcon(self.action)
 
 
     def button_coordpick_point_cliked(self):
@@ -401,10 +434,18 @@ class MapToolKit:
 
     def draw_geometry(self, layer_name: str, geometry: QgsGeometry):
         geom_type = self.wkbType2String(geometry)
-        uri = f'{geom_type}?crs={self.epsg_id_wgs84}'
+        short_name = f'simple_{geom_type}'
+        
+        layers = QgsProject.instance().mapLayersByName(layer_name)
+        layers = list(filter(lambda l : l.shortName() == short_name, layers))
 
-        layer = QgsVectorLayer(uri, layer_name, 'memory')
-        layer.setShortName('simple')
+        if len(layers) != 0:
+            layer = layers[0]
+        else:
+            uri = f'{geom_type}?crs={self.epsg_id_wgs84}'
+            layer = QgsVectorLayer(uri, layer_name, 'memory')
+            layer.setShortName(short_name)
+
         pr = layer.dataProvider()
 
         feature = QgsFeature()
@@ -490,6 +531,8 @@ class MapToolKit:
             x, y = coords[i + 0], coords[i + 1]
             points.append(QgsPointXY(x, y))
 
+        self.log(f'coords {len(coords)} points {len(points)}')
+
         if mode == 0:
             geometry = QgsGeometry.fromMultiPointXY(points)
         elif mode == 1:
@@ -505,18 +548,21 @@ class MapToolKit:
     def button_draw_point_clicked(self):
         layer_name = self.widget.edit_simple_layer_name.text()
         coords = self.widget.text_simple_content.toPlainText()
+        coords = re.sub(self.coords_pattern, '', coords)
         coords_type = self.widget.combo_simple_coordstype.currentText()
         self.draw_simple_feature(layer_name, coords, 0, coords_type)
 
     def button_draw_line_clicked(self):
         layer_name = self.widget.edit_simple_layer_name.text()
         coords = self.widget.text_simple_content.toPlainText()
+        coords = re.sub(self.coords_pattern, '', coords)
         coords_type = self.widget.combo_simple_coordstype.currentText()
         self.draw_simple_feature(layer_name, coords, 1, coords_type)
 
     def button_draw_polygon_clicked(self):
         layer_name = self.widget.edit_simple_layer_name.text()
         coords = self.widget.text_simple_content.toPlainText()
+        coords = re.sub(self.coords_pattern, '', coords)
         coords_type = self.widget.combo_simple_coordstype.currentText()
         self.draw_simple_feature(layer_name, coords, 2, coords_type)
 
