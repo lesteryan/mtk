@@ -36,6 +36,7 @@ import os.path
 import urllib
 import json
 import re
+import sip
 
 from .core.NdsUtil import NdsUtil
 from .core.MerTileUtil import MerTileUtil
@@ -54,7 +55,7 @@ class MapToolKit:
         'amap satelite':'https://webst03.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
         'osm vector':'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         }
-    coords_pattern = r'[^0-9,.]'
+    coords_pattern = r'[^0-9,.\n]'
     closed = False
     dlg = None
     map_tool = None
@@ -78,9 +79,6 @@ class MapToolKit:
             self.translator.load(locale_path)
             QCoreApplication.installTranslator(self.translator)
 
-        self.actions = []
-        self.menu = self.tr(u'&MapToolKit')
-
     def tr(self, message):
         return QCoreApplication.translate('MapToolKit', message)
     
@@ -99,10 +97,11 @@ class MapToolKit:
         self.dlg = MapToolKitDockWidget()
         self.iface.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.dlg)
 
+
         self.widget = self.dlg.widget
         self.map_tool = None
         
-        self.action = QAction(icon=QIcon(':/plugins/mtk/icon.png'), text=self.tr('Show Tool Dock'), parent=self.iface.mainWindow())
+        self.action = QAction(icon=QIcon(':/plugins/mtk/icon.png'), text=self.tr('Show MTK Tool Dock'), parent=self.iface.mainWindow())
         self.action.triggered.connect(self.show_dock)
         self.action.setEnabled(False)
         self.iface.addToolBarIcon(self.action)
@@ -195,6 +194,9 @@ class MapToolKit:
             self.widget.text_geojson_content.setPlainText(json.dumps(json.loads(geometry.asJson()), indent=4))
 
     def handleLayerExtentChanged(self, layer = None):
+        if self.closed:
+            return 
+        
         if self.canvas.scale() > 194089792:
             reply = QMessageBox.question(self.dlg, 'tips', 'canvas scale too large, go to default zoom ?', QMessageBox.Yes | QMessageBox.No | QMessageBox.NoToAll, QMessageBox.Yes)
 
@@ -202,7 +204,7 @@ class MapToolKit:
                 self.canvas.setExtent(QgsRectangle(12962995,4853260,12963803,4853649))
 
         scale = self.canvas.scale()
-        if self.widget.checkbox_tile_draw_with_zoom.isChecked():
+        if not sip.isdeleted(self.widget.checkbox_tile_draw_with_zoom) and self.widget.checkbox_tile_draw_with_zoom.isChecked():
             level = self.widget.spin_tile_level.value()
             nds_layers = QgsProject.instance().mapLayersByShortName('nds')
             num = int(scale / pow(2, level))
@@ -230,7 +232,7 @@ class MapToolKit:
                 if len(tile_ids) != 0:
                     tile_ids_str = ','.join(tile_ids)
                     self.draw_nds_tile_by_layer(nds_layer, tile_ids_str, QgsCoordTrans.COORD.COORD_WGS84)
-        elif self.widget.checkbox_mer_tile_draw_with_zoom.isChecked():
+        elif not sip.isdeleted(self.widget.checkbox_mer_tile_draw_with_zoom) and self.widget.checkbox_mer_tile_draw_with_zoom.isChecked():
             mer_layers = QgsProject.instance().mapLayersByShortName('mer_tile')
             level = self.widget.spin_mer_tile_level.value()
             num = int(scale / pow(2, level))
@@ -331,6 +333,8 @@ class MapToolKit:
 
         nds_layer = QgsVectorLayer(f'Polygon?crs={self.epsg_id_wgs84}', layer_name, 'memory')
         nds_layer.setShortName('nds')
+        nds_layer.setCustomProperty("skipMemoryLayersCheck", 1)
+
         symbol = QgsFillSymbol.createSimple({'color': '#00000000', 'style': 'solid', 'outline_color': 'red', 'stroke_width': '1'})
         nds_layer.renderer().setSymbol(symbol)
         
@@ -362,6 +366,8 @@ class MapToolKit:
 
         mer_layer = QgsVectorLayer(f'Polygon?crs={self.epsg_id_wgs84}', layer_name, 'memory')
         mer_layer.setShortName('mer_tile')
+        mer_layer.setCustomProperty("skipMemoryLayersCheck", 1)
+
         symbol = QgsFillSymbol.createSimple({'color': '#00000000', 'style': 'solid', 'outline_color': 'red', 'stroke_width': '1'})
         mer_layer.renderer().setSymbol(symbol)
         
@@ -432,8 +438,8 @@ class MapToolKit:
         xyz_name = self.widget.combo_xyzlayer_layertype.currentText()
         self.widget.label_xyz_server.setText(self.xyz_layers[xyz_name])
 
-    def draw_geometry(self, layer_name: str, geometry: QgsGeometry):
-        geom_type = self.wkbType2String(geometry)
+    def draw_geometry(self, layer_name: str, geometies: list[QgsGeometry]):
+        geom_type = self.wkbType2String(geometies[0])
         short_name = f'simple_{geom_type}'
         
         layers = QgsProject.instance().mapLayersByName(layer_name)
@@ -441,16 +447,25 @@ class MapToolKit:
 
         if len(layers) != 0:
             layer = layers[0]
+            pr = layer.dataProvider()
         else:
             uri = f'{geom_type}?crs={self.epsg_id_wgs84}'
             layer = QgsVectorLayer(uri, layer_name, 'memory')
             layer.setShortName(short_name)
+            layer.setCustomProperty("skipMemoryLayersCheck", 1)
 
-        pr = layer.dataProvider()
+            pr = layer.dataProvider()
+            pr.addAttributes([QgsField("index", QVariant.Int)])
 
-        feature = QgsFeature()
-        feature.setGeometry(geometry)
-        pr.addFeature(feature)
+            layer.updateFields()
+
+        for idx, g in enumerate(geometies):
+            feature = QgsFeature(pr.fields(), idx)
+            feature.setGeometry(g)
+            feature['index'] = idx
+            
+            pr.addFeature(feature)
+        
         layer.updateExtents()
         QgsProject.instance().addMapLayer(layer)
 
@@ -467,37 +482,42 @@ class MapToolKit:
 
     def button_draw_wkt_clicked(self):
         text_content = self.widget.text_wkt_content.toPlainText()
+        coord_type = self.widget.combo_wkt_coordstype.currentText()
+        layer_name = self.widget.edit_wkt_layer_name.text()
         geometries = list(map(lambda l : QgsGeometry.fromWkt(l.strip()), text_content.strip().split('\n')))
-        geom = geometries[0]
 
-        if geom is None or geom.isEmpty():
-            self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Warning)
+        for geom in geometries:
+            if geom is None or geom.isEmpty():
+                self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Warning)
+                return 
+            
+        if len(geometries) == 0:
             return 
         
-        geom = QgsGeometry(geom)
-    
-        coord_type = self.widget.combo_wkt_coordstype.currentText()
-        geom = QgsCoordTrans.geometry_trans(geom, coord_type, QgsCoordTrans.COORD.COORD_WGS84)
-        layer_name = self.widget.edit_wkt_layer_name.text()
-        self.draw_geometry(layer_name, geom)
+        geometries = list(map(lambda l : QgsCoordTrans.geometry_trans(l, coord_type, QgsCoordTrans.COORD.COORD_WGS84), geometries))
+        
+        self.draw_geometry(layer_name, geometries)
 
     def button_draw_wkb_clicked(self):
         text_content = self.widget.text_wkt_content.toPlainText()
-        geometries = list(map(lambda l : QgsGeometry.fromWkt(l.strip()), text_content.strip().split('\n')))
-        geom = QgsGeometryCollection()
-        for g in geometries:
-            geom.addGeometry(g.get())
-
-        if geom is None or geom.isEmpty():
-            self.iface.messageBar().pushMessage("Error", "invalid wkt string", level=Qgis.Warning)
+        coord_type = self.widget.combo_wkt_coordstype.currentText()
+        layer_name = self.widget.edit_wkt_layer_name.text()
+        geometries = []
+        for line in text_content.strip().split('\n'):
+            g = QgsGeometry()
+            g.fromWkb(bytes.fromhex(line.strip()))
+            if g.isEmpty():
+                self.iface.messageBar().pushMessage("Error", f"invalid wkb string {line}", level=Qgis.Warning)
+                return
+            
+            geometries.append(g)
+            
+        if len(geometries) == 0:
             return 
         
-        geom = QgsGeometry(geom)
+        geometries = list(map(lambda l : QgsCoordTrans.geometry_trans(l, coord_type, QgsCoordTrans.COORD.COORD_WGS84), geometries))
         
-        coord_type = self.widget.combo_wkt_coordstype.currentText()
-        geom = QgsCoordTrans.geometry_trans(geom, coord_type, QgsCoordTrans.COORD.COORD_WGS84)
-        layer_name = self.widget.edit_wkt_layer_name.text()
-        self.draw_geometry(layer_name, geom)
+        self.draw_geometry(layer_name, geometries)
 
     def button_draw_geojson_clicked(self):
         features = QgsJsonUtils.stringToFeatureList(self.widget.text_geojson_content.toPlainText())
@@ -510,40 +530,53 @@ class MapToolKit:
         uri = f'{geom_type}?crs={self.epsg_id_wgs84}'
         layer = QgsVectorLayer(uri, layer_name, 'memory')
         layer.setShortName('geojson')
+        layer.setCustomProperty("skipMemoryLayersCheck", 1)
+
         pr = layer.dataProvider()
         pr.addFeatures(features)
 
         layer.updateExtents()
         QgsProject.instance().addMapLayer(layer)
 
+    def parse_coords_str(self, coords_str: str) -> list[list[QgsPointXY]]:
+        lines = list(filter(lambda l : len(l) != 0, map(lambda l : l.strip(), coords_str.split('\n'))))
+        coords = []
+        
+        for idx, line in enumerate(lines):
+            line_coords = list(map(lambda x : float(x.strip()), line.split(',')))
+            line_points = []
+
+            if len(line_coords) == 0:
+                continue 
+            elif len(line_coords) % 2 != 0:
+                self.iface.messageBar().pushMessage("Error", f"line {idx} invalid coords num {len(line_coords)}, should be odd!", level=Qgis.Warning)
+                return coords
+
+            for i in range(0, len(line_coords), 2):
+                x, y = line_coords[i + 0], line_coords[i + 1]
+                line_points.append(QgsPointXY(x, y))
+
+            coords.append(line_points)
+
+        return coords
+
     # mode 0 point 1 line 2 polygone
     def draw_simple_feature(self, layer_name: str, coords_str: str, mode: int, coords_sys: str):
-        coords = list(map(lambda x : float(x.strip()), coords_str.strip().split(',')))
-        points = []
+        lines = coords_str.split('\n')
+        coords = self.parse_coords_str(coords_str)
 
-        if len(coords) % 2 != 0:
-            self.iface.messageBar().pushMessage("Error", f"invalid coords num, should be odd!", level=Qgis.Warning)
+        if len(coords) == 0:
+            self.iface.messageBar().pushMessage("Error", "empty geometry", level=Qgis.Warning)
             return 
-        elif len(coords) == 0:
-            return 
-
-        for i in range(0, len(coords), 2):
-            x, y = coords[i + 0], coords[i + 1]
-            points.append(QgsPointXY(x, y))
-
-        self.log(f'coords {len(coords)} points {len(points)}')
 
         if mode == 0:
-            geometry = QgsGeometry.fromMultiPointXY(points)
+            geometries = list(map(lambda l : QgsGeometry.fromMultiPointXY(l), coords))
         elif mode == 1:
-            geometry = QgsGeometry.fromPolylineXY(points)
+            geometries = list(map(lambda l : QgsGeometry.fromPolylineXY(l), coords))
         elif mode == 2:
-            geometry = QgsGeometry.fromPolygonXY([points])
+            geometries = list(map(lambda l : QgsGeometry.fromPolygonXY(l), coords))
 
-        geometry = QgsCoordTrans.geometry_trans(geometry, coords_sys, QgsCoordTrans.COORD.COORD_WGS84)
-
-        if geometry is not None and not geometry.isEmpty():
-            self.draw_geometry(layer_name, geometry)  
+        self.draw_geometry(layer_name, geometries)  
 
     def button_draw_point_clicked(self):
         layer_name = self.widget.edit_simple_layer_name.text()
