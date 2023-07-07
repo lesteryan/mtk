@@ -1,7 +1,9 @@
 MTK is a tool set for map navigation developers, which includes the functions of drawing and picking up points, lines and polygons, inquiring and drawing NDS tiles and mercator tiles, displaying in WKT/WKB format and geojson format, wgs84/gcj02 coordinate system transfer, etc.
 
-geometry visualization
-你可以输入一些格式为x1,y1,x2,y2,x3,y3的点串，选择以点、线或者面的形式进行绘制
+
+点线面的可视化
+你可以输入一些格式为x1,y1,x2,y2,x3,y3的点串，选择以点、线或者面的形式进行绘制,如果文本中存在换行，每行geometry都将拥有一个顺序号
+![simple](readme_img/simple.png)
 
 坐标拾取
 你可以在canvas上以点、线或者面的形式绘制一些图形，左键绘制，右键作为multilinestring 或者 multipolygon的分隔，连续右键作为结束，拾取一些坐标点，这些坐标也会以geojson和wkt的形式存储在geojson wkt标签栏
