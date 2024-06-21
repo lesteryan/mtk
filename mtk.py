@@ -60,6 +60,7 @@ class MapToolKit:
     dlg = None
     map_tool = None
     action = None
+    notify_extent_enable = True
 
     def __init__(self, iface : QgisInterface):
         self.iface = iface
@@ -197,11 +198,13 @@ class MapToolKit:
         if self.closed:
             return 
         
-        if self.canvas.scale() > 194089792:
+        if self.notify_extent_enable and self.canvas.scale() > 194089792 :
             reply = QMessageBox.question(self.dlg, 'tips', 'canvas scale too large, go to default zoom ?', QMessageBox.Yes | QMessageBox.No | QMessageBox.NoToAll, QMessageBox.Yes)
 
             if reply == QMessageBox.Yes:
                 self.canvas.setExtent(QgsRectangle(12962995,4853260,12963803,4853649))
+            elif reply == QMessageBox.NoToAll:
+                self.notify_extent_enable = False
 
         scale = self.canvas.scale()
         if not sip.isdeleted(self.widget.checkbox_tile_draw_with_zoom) and self.widget.checkbox_tile_draw_with_zoom.isChecked():
